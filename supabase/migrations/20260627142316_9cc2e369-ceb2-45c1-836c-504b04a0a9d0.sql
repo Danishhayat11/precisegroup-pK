@@ -1,0 +1,1 @@
+DELETE FROM public.installment_ledger WHERE due_amount IS NULL AND paid_amount IS NULL AND (particulars IS NULL OR particulars = '') AND due_date IS NULL;

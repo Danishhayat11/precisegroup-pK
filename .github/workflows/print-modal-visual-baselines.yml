@@ -1,0 +1,230 @@
+name: Print modal visual baselines (regenerate)
+
+# Manually-triggered workflow to regenerate the pixel baselines used by
+# tests/a11y/print-modal-zoom-dpi-visual.spec.ts. Running this locally
+# and committing the resulting PNGs works, but two things go wrong in
+# practice:
+#   - Local rasters differ from CI rasters (font hinting, GPU/SwiftShader
+#     path, headless-shell version). Baselines generated on macOS then
+#     committed will fail on the Ubuntu CI runner.
+#   - Contributors don't always have Firefox / WebKit installed, so the
+#     baselines for those engines never get refreshed.
+#
+# This workflow runs the visual spec with `--update-snapshots` on the
+# same Ubuntu image the PR checks use, uploads the resulting snapshot
+# directory as an artifact, and prints a summary of what changed so
+# the reviewer can download the artifact, inspect the PNGs, and commit
+# them via a follow-up PR. Baselines are NEVER auto-committed — a
+# human must review each diff to catch accidental layout regressions
+# masquerading as "intentional" baseline drift.
+#
+# Trigger:
+#   Actions tab → "Print modal visual baselines (regenerate)" → Run workflow
+#   Choose the browser to regenerate: chromium (default), firefox, webkit, or all.
+
+on:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Which browser's baselines to regenerate"
+        required: true
+        default: "chromium"
+        type: choice
+        options:
+          - chromium
+          - firefox
+          - webkit
+          - all
+
+concurrency:
+  # Only one regen job at a time — the artifact name is deterministic
+  # and back-to-back runs would confuse the reviewer.
+  group: print-modal-visual-baselines-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  regen:
+    name: Regenerate (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chromium
+            project: chromium-reduced-motion
+          - browser: firefox
+            project: firefox-reduced-motion
+          - browser: webkit
+            project: webkit-reduced-motion
+    # Skip matrix legs the user didn't ask for. `all` runs every leg.
+    if: >-
+      github.event.inputs.browser == 'all' ||
+      github.event.inputs.browser == matrix.browser
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      SNAPSHOT_DIR: tests/a11y/print-modal-zoom-dpi-visual.spec.ts-snapshots
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      - name: Cache Playwright browser (${{ matrix.browser }})
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps ${{ matrix.browser }}
+
+      - name: Validate Playwright system deps
+        run: bash .github/scripts/validate-playwright-apt-deps.sh ${{ matrix.browser }}
+
+      - name: Snapshot pre-regen SHAs
+        id: pre
+        run: |
+          mkdir -p /tmp/baselines
+          if [ -d "$SNAPSHOT_DIR" ]; then
+            (cd "$SNAPSHOT_DIR" && find . -name "*-${{ matrix.project }}-linux.png" -type f | sort \
+              | xargs -r sha256sum) > /tmp/baselines/pre.txt || true
+          else
+            : > /tmp/baselines/pre.txt
+          fi
+          echo "count=$(wc -l < /tmp/baselines/pre.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate visual baselines
+        run: |
+          bunx playwright test tests/a11y/print-modal-zoom-dpi-visual.spec.ts \
+            --project=${{ matrix.project }} \
+            --update-snapshots \
+            --reporter=list \
+            --output=test-results
+
+      - name: Snapshot post-regen SHAs
+        id: post
+        run: |
+          (cd "$SNAPSHOT_DIR" && find . -name "*-${{ matrix.project }}-linux.png" -type f | sort \
+            | xargs -r sha256sum) > /tmp/baselines/post.txt || true
+          echo "count=$(wc -l < /tmp/baselines/post.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Diff pre vs post and write summary
+        run: |
+          {
+            echo "# Visual baseline regeneration — ${{ matrix.browser }}"
+            echo ""
+            echo "**Project:** \`${{ matrix.project }}\`"
+            echo "**Snapshot dir:** \`$SNAPSHOT_DIR\`"
+            echo "**Baselines before:** ${{ steps.pre.outputs.count }}"
+            echo "**Baselines after:**  ${{ steps.post.outputs.count }}"
+            echo ""
+            if diff -q /tmp/baselines/pre.txt /tmp/baselines/post.txt >/dev/null 2>&1; then
+              echo "✅ No baseline SHAs changed — regeneration was a no-op."
+            else
+              echo "⚠️ Baseline SHAs changed. Per-file diff:"
+              echo ""
+              echo '| Status | File | Old SHA256 | New SHA256 |'
+              echo '|---|---|---|---|'
+              # Union of file names across both snapshots.
+              awk '{print $2}' /tmp/baselines/pre.txt /tmp/baselines/post.txt \
+                | sort -u \
+                | while read -r f; do
+                    old=$(awk -v f="$f" '$2==f{print substr($1,1,12)}' /tmp/baselines/pre.txt)
+                    new=$(awk -v f="$f" '$2==f{print substr($1,1,12)}' /tmp/baselines/post.txt)
+                    if [ -z "$old" ] && [ -n "$new" ]; then
+                      status="🆕 added"
+                    elif [ -n "$old" ] && [ -z "$new" ]; then
+                      status="🗑 removed"
+                    elif [ "$old" != "$new" ]; then
+                      status="✏️ changed"
+                    else
+                      continue
+                    fi
+                    echo "| $status | \`$f\` | \`${old:-—}\` | \`${new:-—}\` |"
+                  done
+              echo ""
+              echo "**Next step:** download the \`print-modal-visual-baselines-${{ matrix.browser }}\`"
+              echo "artifact from this run, diff the PNGs against the committed baselines,"
+              echo "and open a PR with the updated files under \`$SNAPSHOT_DIR/\`."
+              echo "Do NOT auto-commit — a human must confirm each change is intentional."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload regenerated baselines
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-visual-baselines-${{ matrix.browser }}
+          # Upload the whole snapshot dir; the artifact will only be
+          # meaningfully different for the current browser's project files.
+          path: tests/a11y/print-modal-zoom-dpi-visual.spec.ts-snapshots/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-visual-baselines-${{ matrix.browser }}-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: ignore

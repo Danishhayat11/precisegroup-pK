@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lovable.dev/schemas/print-modal-summary.json",
+  "title": "PrintModalLayoutMetricsSummary",
+  "description": "Aggregated envelope written by scripts/testing/run-print-modal-layout-metrics.sh --summary-json. One file per run; overwritten each invocation.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "runAt",
+    "project",
+    "browser",
+    "spec",
+    "exitStatus",
+    "summaryMd",
+    "summaryMode",
+    "tolerancePx",
+    "recordCount",
+    "records"
+  ],
+  "properties": {
+    "runAt": { "type": "string", "format": "date-time" },
+    "project": { "type": "string", "minLength": 1 },
+    "browser": { "type": "string", "minLength": 1 },
+    "spec": { "type": "string", "minLength": 1 },
+    "exitStatus": { "type": "integer", "minimum": 0 },
+    "summaryMd": { "type": "string", "minLength": 1 },
+    "summaryMode": { "type": "string", "enum": ["append", "overwrite"] },
+    "tolerancePx": { "type": ["number", "null"] },
+    "recordCount": { "type": "integer", "minimum": 0 },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "browser",
+          "spec",
+          "tolerancePx",
+          "caseSlug",
+          "doc",
+          "sheetCount",
+          "perSheet",
+          "rawMetrics"
+        ],
+        "properties": {
+          "browser": { "type": "string", "minLength": 1 },
+          "spec": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Playwright spec file that produced this record; mirrors the envelope-level spec so a record is auditable in isolation."
+          },
+          "tolerancePx": {
+            "type": ["number", "null"],
+            "description": "Layout tolerance in px used when producing this record; mirrors the envelope-level tolerancePx."
+          },
+          "caseSlug": { "type": "string" },
+          "caseLabel": { "type": "string" },
+          "doc": { "type": "string" },
+          "status": { "type": "string" },
+          "sheetCount": { "type": "integer", "minimum": 0 },
+          "expectedSheets": { "type": "integer", "minimum": 0 },
+          "sheetCountOk": { "type": "boolean" },
+          "perSheet": { "type": "array", "items": { "type": "object" } },
+          "rawMetrics": {
+            "type": "array",
+            "description": "Full unabridged SheetMetrics captured from the DOM; enables run replay/audit.",
+            "items": { "type": "object" }
+          },
+          "capturedAt": { "type": "string", "format": "date-time" },
+          "schemaVersion": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

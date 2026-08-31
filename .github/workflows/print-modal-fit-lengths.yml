@@ -1,0 +1,151 @@
+name: Print modal fit lengths
+
+# Runs tests/a11y/print-modal-fit-lengths.spec.ts on every PR that could
+# affect the print-preview auto-fit math. The spec pins the
+# height/width fit contract at both content-length extremes against
+# /test-print-modal on portrait mobile (390×844) and desktop (1280×900):
+#   1. short receipt renders exactly one .pp-sheet and its width fits
+#      the preview container (no horizontal overflow)
+#   2. long receipt paginates into ≥ 2 .pp-sheet elements, the first
+#      still auto-fits the container, and the render-status chip
+#      announces the correct page count
+# Complements the print-modal-mobile-render workflow, which pins the
+# mobile-only render integrity + blank-preview helper. Splitting these
+# into two workflows gives faster, more distinct PR feedback: a failure
+# name tells you *which* invariant broke without opening the report.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/a11y/print-modal-fit-lengths.spec.ts"
+      - "src/components/PrintPreviewModal.tsx"
+      - "src/routes/test-print-modal.tsx"
+      - "src/lib/letterhead*"
+      - "src/lib/printFlow*"
+      - "src/lib/paperPresets*"
+      - "src/lib/logos*"
+      - "playwright.config.ts"
+      - ".github/workflows/print-modal-fit-lengths.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/a11y/print-modal-fit-lengths.spec.ts"
+      - "src/components/PrintPreviewModal.tsx"
+      - "src/routes/test-print-modal.tsx"
+      - ".github/workflows/print-modal-fit-lengths.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: print-modal-fit-lengths-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fit-lengths:
+    name: Fit lengths (chromium-reduced-motion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      - name: Cache Playwright browser (chromium)
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      - name: Validate Playwright system deps
+        run: bash .github/scripts/validate-playwright-apt-deps.sh chromium
+
+      - name: Run print modal fit-lengths spec
+        run: |
+          bunx playwright test tests/a11y/print-modal-fit-lengths.spec.ts \
+            --project=chromium-reduced-motion \
+            --retries=1 \
+            --reporter=list,html \
+            --output=test-results
+
+      - name: Upload HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-fit-lengths-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload traces & failure snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-fit-lengths-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: ignore

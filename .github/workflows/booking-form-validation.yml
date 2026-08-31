@@ -1,0 +1,154 @@
+name: Booking form validation (Playwright)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: booking-form-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  booking-form-validation:
+    name: BookingForm validation spec (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # `browser` = the Playwright browser binary to install/cache.
+        # `project` = the matching project name in playwright.config.ts
+        # (all suffixed `-reduced-motion` so animations don't flake).
+        include:
+          - browser: chromium
+            project: chromium-reduced-motion
+          - browser: firefox
+            project: firefox-reduced-motion
+          - browser: webkit
+            project: webkit-reduced-motion
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      PLAYWRIGHT_HTML_REPORT: playwright-report
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          set -euo pipefail
+          version=$(node -e "console.log(require('@playwright/test/package.json').version)")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      # Per-browser cache: the browser binaries differ, so keying by
+      # browser keeps chromium/firefox/webkit caches independent and
+      # prevents cross-browser cache invalidation when only one bumps.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-${{ matrix.browser }}
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps ${{ matrix.browser }}
+
+      - name: Start dev server
+        run: |
+          bun run dev > dev-server.log 2>&1 &
+          echo $! > dev-server.pid
+          # Wait for readiness
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+              echo "Dev server ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Dev server failed to start within 60s"
+          tail -n 200 dev-server.log
+          exit 1
+
+      - name: Run BookingForm validation spec
+        id: run-tests
+        run: |
+          bunx playwright test tests/a11y/booking-form-validation.spec.ts \
+            --project=${{ matrix.project }} \
+            --reporter=list,html \
+            --trace=retain-on-failure
+
+      - name: Stop dev server
+        if: always()
+        run: |
+          if [ -f dev-server.pid ]; then
+            kill "$(cat dev-server.pid)" 2>/dev/null || true
+          fi
+
+      # Artifact names must be unique per matrix leg, otherwise the
+      # second upload in the matrix errors out with "an artifact with
+      # this name already exists".
+      - name: Upload Playwright HTML report (on failure)
+        if: failure() && steps.run-tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-form-validation-playwright-report-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload dev server log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-form-validation-dev-server-log-${{ matrix.browser }}
+          path: dev-server.log
+          retention-days: 7
+          if-no-files-found: ignore

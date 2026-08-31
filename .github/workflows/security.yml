@@ -1,0 +1,753 @@
+name: Security regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit-cli-contract:
+    name: Audit CLI contract (help + invalid args)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # No DB required: tests booking-reconciliation.mjs argv handling.
+    # Guarantees --help → exit 0 with Usage, and every invalid/missing-arg
+    # path → exit 2 with a clear error. Catches CLI surface regressions
+    # before the live matrix audit (which depends on the same script) runs.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lint audit shell scripts with shellcheck
+        # Catches obvious shell mistakes (unquoted expansions, unreachable
+        # branches, broken redirections, missing `set -e` semantics) BEFORE
+        # the assertion suites run, so a syntactically broken test script
+        # surfaces as a lint failure instead of a cryptic assertion miss.
+        # `-S error` keeps the gate at the severity we've already cleaned;
+        # warnings still print to the log for visibility but don't block.
+        # `-x` lets shellcheck follow `source`/`.` into _lib/ helpers.
+        # shellcheck is preinstalled on ubuntu-latest runners.
+        run: |
+          shellcheck --version
+          shellcheck -S error -x \
+            scripts/audit/tests/*.sh \
+            scripts/audit/tests/_lib/*.sh
+      - name: Run CLI contract assertions
+        run: bash scripts/audit/tests/cli-contract.sh
+
+      - name: Run CLI exit-code assertions (0 / 1 / 2 scenarios)
+        # Stubs `psql` on PATH and asserts the documented runtime exit codes
+        # for happy-path, drift, missing-pin (strict + --no-strict + env),
+        # and invalid-id scenarios. No real DB call is made.
+        run: bash scripts/audit/tests/cli-exit-codes.sh
+      - name: Run strict-mode assertions (warn vs fail + CI policy on main)
+        # Verifies --no-strict / AUDIT_STRICT=0 turn missing-pin exit 2 into
+        # exit 0 + ::warning, that strict mode keeps exit 2, and that the
+        # documented CI handler escalates exit 2 → fail on `main` while
+        # leaving feature branches as warnings. No DB call is made.
+        run: bash scripts/audit/tests/strict-mode.sh
+      - name: Run required-args + DB-connection assertions (exit 2 / exit 3)
+        # Pins the exact error messages for every required-arg failure
+        # (exit 2) and for the two infrastructure-failure paths (exit 3):
+        # psql missing from PATH and psql reachable but DB unreachable.
+        # Uses a sandbox PATH + stub psql; no real DB call.
+        run: bash scripts/audit/tests/required-args-and-db.sh
+      - name: Run branch-escalation wrapper assertions (feature warn vs main fail)
+        # Pins the documented CI wrapper: missing-pin exit 2 must surface as
+        # ::warning + exit 0 on simulated feature branches (refs/heads/feature/*,
+        # refs/heads/fix/*) and escalate to ::error + exit 1 on the default
+        # branch. Also covers a custom DEFAULT_BRANCH so non-`main` trunks
+        # behave the same way. No DB call: targets an unpinned booking id.
+        run: bash scripts/audit/tests/branch-escalate.sh
+      - name: Smoke-test the exit-summary helper itself
+        # Pins the contract of scripts/audit/tests/_lib/exit-summary.sh
+        # (header uniqueness, default + overridden labels, ✓/✗ row
+        # formatting, failing-row attribution under the *expected* code,
+        # empty-bucket placeholder, custom print order). Runs BEFORE
+        # summary-format.sh so a broken helper surfaces as a helper bug
+        # rather than as a cascade of "missing label" failures across
+        # every suite.
+        #
+        # The run / upload-on-failure / publish-to-job-summary wiring
+        # lives in the reusable composite action so every future audit
+        # job can opt into the same gating with a single `uses:` line —
+        # see .github/actions/exit-summary-smoke/action.yml.
+        id: exit_summary_smoke
+        if: ${{ always() }}
+        uses: ./.github/actions/exit-summary-smoke
+        with:
+          script: scripts/audit/tests/_lib/exit-summary.smoke.sh
+          log-dir: .exit-summary-smoke
+          log-name: exit-summary.smoke.log
+          artifact-name: exit-summary-smoke-failure
+          summary-heading: exit-summary.smoke.sh
+
+      - name: Verify suite-discovery helper (enumeration + set -u + fixtures)
+        # Pins scripts/audit/tests/_lib/suite-discovery.sh — the shared
+        # `discover_suites` helper every audit-test enumerator
+        # (summary-format.sh, cli-contract.sh self-regression,
+        # _lib/summary-format.meta.sh, run-all.sh drift guard) sources.
+        # Asserts real-tree enumeration, built-in exemptions, sorted
+        # output, caller-supplied extra exempts, fixture-tree edge
+        # cases, AND that the helper is safe to call under `set -u` /
+        # `set -euo pipefail` with no positional args (the canonical
+        # first-time-caller failure mode). Runs even if an earlier
+        # smoke step failed so a discovery-helper regression surfaces
+        # in the same run. `always()` mirrors the other _lib smokes.
+        id: suite_discovery_smoke
+        if: ${{ always() }}
+        run: bash scripts/audit/tests/_lib/suite-discovery.smoke.sh
+
+      - name: Verify reusable bucket-shape fixtures (placeholder / records / mixed)
+        # Pins scripts/audit/tests/_lib/bucket-fixtures.sh — the shared
+        # generators that emit canonical placeholder-only / records-only /
+        # mixed bucket suites. The smoke test asserts the emitted shapes
+        # AND drives each one through summary-format.sh in an isolated
+        # mirror so a refactor to either layer trips here before any
+        # consumer (negative.sh, fail-artifact.sh, future regressions)
+        # silently builds on a broken fixture. `always()` so a per-step
+        # failure above does not mask a fixture-helper regression.
+        id: bucket_fixtures_smoke
+        if: ${{ always() }}
+        run: bash scripts/audit/tests/_lib/bucket-fixtures.smoke.sh
+
+      - name: Verify cli-contract.sh docs match rendered bucket layout
+        # Cross-checks scripts/audit/tests/cli-contract.sh's header
+        # documentation against the Exit-code summary it actually
+        # renders: bucket 0 → --help / -h ✓ rows, bucket 1 →
+        # placeholder, bucket 2 → six invalid-arg ✓ rows, in
+        # ascending 0/1/2 order via summary_print 0 1 2. Catches drift
+        # in EITHER direction — prose tweaked without updating the
+        # script, or rows added/removed without updating the prose —
+        # so the contract every other audit consumer relies on cannot
+        # silently rot. `always()` so a logic regression upstream
+        # does not mask a docs/render drift here.
+        id: cli_contract_docs
+        if: ${{ always() }}
+        run: bash scripts/audit/tests/_lib/cli-contract.docs.sh
+
+      - name: Verify cli-contract.sh example snippet parity (header + README ⇔ live render)
+        # Cross-checks the canonical bucket snippet pinned in
+        # scripts/audit/tests/cli-contract.sh's header and mirrored in
+        # scripts/audit/tests/_lib/README.md against the actual live
+        # render. Complements the docs-vs-render structural gate by
+        # asserting *content parity* — the prose example cannot drift
+        # away from the live exit-summary/summary-format output. Runs
+        # under always() so a structural-gate failure upstream still
+        # surfaces snippet drift in the same CI report.
+        id: cli_contract_example_parity
+        if: ${{ always() }}
+        run: bash scripts/audit/tests/_lib/cli-contract.example.sh
+
+      - name: Verify Exit-code summary format across all audit test scripts
+        # Guards the shared scripts/audit/tests/_lib/exit-summary.sh contract:
+        # every audit test script must emit "── Exit-code summary ──" with the
+        # documented per-suite bucket labels in the documented order, and each
+        # bucket must contain a recognised body line. Runs even if an earlier
+        # suite failed so a summary-format regression is surfaced in the same
+        # CI run as any logic regression. See scripts/audit/README.md.
+        #
+        # SUMMARY_FAILURE_ARTIFACT (default `1` in CI) toggles the per-suite
+        # failures artifact: set to `0` to suppress both the script's
+        # FAIL_DIR writes AND the matching upload step below. The same env
+        # var gates `Upload failing Exit-code summary output` via its `if:`
+        # condition, so flipping it here disables both halves atomically.
+        id: summary_format
+        if: ${{ always() }}
+        env:
+          SUMMARY_FAILURE_ARTIFACT: "1"
+        run: bash scripts/audit/tests/summary-format.sh
+      - name: Upload failing Exit-code summary output
+        # Only fires when summary-format.sh detected a contract mismatch and
+        # populated .summary-format-failures/ with the captured per-suite
+        # logs + FAILURES.md index. `if-no-files-found: ignore` keeps the
+        # step quiet on green runs (the script's EXIT trap removes the dir
+        # on success, so there's nothing to upload). Skipped entirely when
+        # SUMMARY_FAILURE_ARTIFACT=0 — the script writes no artifact, so
+        # there is nothing to upload.
+        if: ${{ always() && steps.summary_format.outcome == 'failure' && env.SUMMARY_FAILURE_ARTIFACT != '0' }}
+        env:
+          SUMMARY_FAILURE_ARTIFACT: "1"
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-format-failures
+          path: .summary-format-failures/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Clean up summary-format failures dir
+        # Defence in depth: summary-format.sh already removes
+        # .summary-format-failures/ on the green path via its EXIT trap,
+        # but on the failure path it deliberately preserves the directory
+        # so the upload step above can pick it up. Once that upload has
+        # run (or been skipped), always remove the directory so it never
+        # leaks into later steps, caches, or self-hosted runner workspaces.
+        if: ${{ always() }}
+        run: rm -rf .summary-format-failures/
+
+      - name: Verify summary-format.sh auto-discovery contract (meta-tests)
+        # Pins TWO behaviours of summary-format.sh's auto-discovery layer:
+        # (1) auto-discovered suites render in the canonical ascending
+        # order that `discover_suites` returns them, and (2) orchestrator
+        # / helper scripts (run-all.sh, summary-format.sh itself, and
+        # anything under _lib/) are never auto-discovered. A refactor
+        # that breaks either invariant would silently produce
+        # non-deterministic CI logs or recurse into the orchestrator;
+        # this step catches it before the entrypoint composition step
+        # below runs. `always()` so a per-step suite failure above does
+        # not mask a discovery-layer regression.
+        id: summary_format_meta
+        if: ${{ always() }}
+        run: |
+          set -o pipefail
+          mkdir -p .summary-format-meta
+          bash scripts/audit/tests/_lib/summary-format.meta.sh \
+            2>&1 | tee .summary-format-meta/summary-format.meta.log
+
+      - name: Upload failing summary-format.meta.sh output
+        # Only fires when the meta-tests detected a regression in
+        # summary-format.sh's auto-discovery layer (canonical order
+        # mismatch, orchestrator/helper accidentally auto-discovered,
+        # etc). The captured log contains the full expected-vs-actual
+        # diff the meta-suite printed, so reviewers can debug an order
+        # break without re-running locally against the fixture tree.
+        if: ${{ always() && steps.summary_format_meta.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-format-meta-failure
+          path: .summary-format-meta/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Verify summary-format failure-artifact contents (fail-artifact regression)
+        # Intentionally triggers a summary-format mismatch in an isolated
+        # fixture tree (a deliberately-broken stub suite that emits no
+        # "── Exit-code summary ──" block) and asserts the resulting
+        # .summary-format-failures/ artifact contains:
+        #   - FAILURES.md            (markdown index)
+        #   - index.html             (browser-renderable index)
+        #   - <suite-basename>.log   (captured stdout+stderr per suite)
+        # Guards against silent regressions where summary-format.sh
+        # detects the mismatch but stops writing one of the artifact
+        # files reviewers depend on. Runs even if upstream steps failed
+        # so an artifact-shape regression is reported in the same CI run
+        # as any other summary-format change.
+        id: summary_format_fail_artifact
+        if: ${{ always() }}
+        run: bash scripts/audit/tests/_lib/summary-format.fail-artifact.sh
+
+      - name: Verify summary-format.sh bucket-coverage + negative paths (PR only)
+        # Sweeps the auto-discovery validator across the catalogue of
+        # contract violations it is supposed to catch — missing canonical
+        # bucket (0/1/2), buckets out of order, malformed bucket body,
+        # missing Exit-code summary header — by building isolated fixture
+        # trees with exactly one broken suite each. Complements
+        # summary-format.fail-artifact.sh (which pins the artifact LAYOUT
+        # for one scenario) by pinning the validator's BEHAVIOUR across
+        # every reason string it can emit. Gated to pull_request events
+        # so every PR exercises the negative paths before merge, while
+        # push-to-main runs (already covered by the per-scenario suites
+        # above) skip it to keep the main-branch pipeline lean.
+        # `always()` so a per-step suite failure above does not mask a
+        # validator-behaviour regression on a PR.
+        id: summary_format_negative
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        run: bash scripts/audit/tests/_lib/summary-format.negative.sh
+
+      - name: Run full audit entrypoint (run-all.sh, canonical order)
+        # End-to-end re-run via the single documented entrypoint. Confirms
+        # that cli-contract.sh → cli-exit-codes.sh → strict-mode.sh →
+        # branch-escalate.sh → required-args-and-db.sh → summary-format.sh
+        # still compose under run-all.sh's fail-fast trap (so local
+        # `bash scripts/audit/tests/run-all.sh` and CI stay in lockstep).
+        # Runs even if a per-step suite above failed so an ordering /
+        # composition regression surfaces in the same CI run as the
+        # individual assertion failure. The per-step runs above keep the
+        # GitHub Actions UI annotations granular; this step guards the
+        # entrypoint contract itself.
+        id: run_all
+        if: ${{ always() }}
+        run: |
+          set -o pipefail
+          mkdir -p .run-all
+          bash scripts/audit/tests/run-all.sh 2>&1 | tee .run-all/run-all.log
+      - name: Upload failing run-all.sh output
+        # Captures the fail-fast trap output ("✗ FAILED: [N/total] …") plus
+        # the failing suite's full log so reviewers can tell an ordering /
+        # composition break from an individual suite regression without
+        # re-running locally.
+        if: ${{ always() && steps.run_all.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-all-failure
+          path: .run-all/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  regression:
+    name: Previously-fixed findings must stay fixed
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      # Optional: when set, db-side assertions run.
+      # Provide as a repo secret named SUPABASE_DB_URL (postgres://...).
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      # Runtime AI auth Playwright suite + positive-path regression checks.
+      # AI_TEST_BEARER is optional: if not provided, it is minted at runtime
+      # below from SUPABASE_SERVICE_ROLE_KEY (see "Mint AI_TEST_BEARER").
+      AI_TEST_BASE_URL: ${{ secrets.AI_TEST_BASE_URL }}
+      AI_TEST_BEARER: ${{ secrets.AI_TEST_BEARER }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - name: Pre-register log masks
+        # Belt-and-braces: register ::add-mask:: for every secret-shaped
+        # value the job touches BEFORE any later step can emit it (curl
+        # verbose output, node stack traces, psql errors, etc.). GitHub
+        # already masks values referenced via `${{ secrets.* }}`, but a
+        # raw string that *happens* to equal one — e.g. echoed by a
+        # third-party tool — only gets masked once we've registered it
+        # here. We also register a synthetic JWT-shape and sb_*_key shape
+        # marker so anything matching gets visibly redacted in the UI.
+        env:
+          M1: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          M2: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          M3: ${{ secrets.SUPABASE_URL }}
+          M4: ${{ secrets.SUPABASE_DB_URL }}
+          M5: ${{ secrets.AI_TEST_BEARER }}
+          M6: ${{ secrets.AI_TEST_BASE_URL }}
+        run: |
+          for v in "$M1" "$M2" "$M3" "$M4" "$M5" "$M6"; do
+            if [ -n "$v" ]; then
+              echo "::add-mask::$v"
+            fi
+          done
+
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun deps
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install deps (cache miss only)
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Dependency vulnerability audit (high+critical)
+        # Fails on any high or critical advisory in production deps.
+        # Use `bun audit --json` so non-zero exit always means "advisories found".
+        run: |
+          set -o pipefail
+          bun audit --prod --severity high --json | tee bun-audit.json
+        continue-on-error: false
+
+      - name: Install psql (for DB regression checks)
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Export PG* env from SUPABASE_DB_URL
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          # Parse the URL into the PG* vars psql expects. We never echo the password.
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import os, urllib.parse as up
+          u = up.urlparse(os.environ["SUPABASE_DB_URL"])
+          print(f"PGHOST={u.hostname}")
+          print(f"PGPORT={u.port or 5432}")
+          print(f"PGUSER={u.username}")
+          print(f"PGDATABASE={(u.path or '/postgres').lstrip('/')}")
+          print(f"PGSSLMODE=require")
+          PY
+          # Password goes to a separate file with restricted env scope.
+          echo "PGPASSWORD=$(python3 -c 'import os,urllib.parse as p;print(p.urlparse(os.environ[\"SUPABASE_DB_URL\"]).password or \"\")')" >> "$GITHUB_ENV"
+
+      - name: Validate pinned expectations schema
+        # Fail-fast schema check: required fields present, non-negative
+        # integers, no unknown keys, and arithmetic identities hold
+        # (down + installments + possession === cash_received, etc.).
+        # Catches malformed pins before the matrix audit job spins up DBs.
+        run: node scripts/audit/validate-expectations.mjs
+
+      - name: Run security regression checks
+        run: node scripts/security/regression-check.mjs
+
+      - name: RLS — profiles.active_project_code isolation
+        # Runtime probe: provisions two disposable users via the Auth Admin
+        # API, seeds their profiles.active_project_code via service role,
+        # then asserts (as user A, with a real access token) that A can
+        # only read/update its own row and that any UPDATE targeting user
+        # B's id affects 0 rows AND leaves B's value unchanged on disk.
+        # Skips when the required Supabase secrets aren't provisioned so
+        # forks/PRs without secret access don't red-flag the check.
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SUPABASE_PUBLISHABLE_KEY != '' }}
+        run: bun run test:security:rls-profiles
+
+      - name: DB constraint — profiles.active_project_code FK
+        # Runtime probe for the FK added in
+        # 20260707074500_profiles_active_project_code_fk.sql. Asserts that
+        # NULL and real project_codes are accepted, bogus codes are rejected
+        # with SQLSTATE 23503, project rename cascades, and project delete
+        # SETs the profile column to NULL (rather than deleting the row).
+        # All mutations run via service-role and are restored in `finally`.
+        # Skipped on forks/PRs without the Supabase secrets.
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SUPABASE_PUBLISHABLE_KEY != '' }}
+        run: bun run test:security:profiles-fk
+
+      - name: BK-MA-00014 pinned reconciliation (unit)
+        # Always runs — no DB required. Pins the agreed ledger/KPI snapshot
+        # so any code change that drifts overdue/pending/cleanup math for
+        # this booking fails the build with a clear field-level diff.
+        run: bunx vitest run src/lib/__tests__/bk-ma-00014.test.ts --reporter=default
+
+      # NOTE: the booking-reconciliation matrix has moved to its own job
+      # (see `booking-reconciliation` below). Keeping it as a matrix means
+      # one runner per pinned booking, an independent pass/fail badge per
+      # contract, and a dedicated job summary slot per booking — much
+      # easier to read in the Actions UI than a single looped step.
+
+      - name: Mint AI_TEST_BEARER (when service-role creds available)
+        # Skips silently if AI_TEST_BEARER is already set, or if any of the
+        # required Supabase env vars are missing. The script masks the token,
+        # exports it to $GITHUB_ENV, and never prints it to logs.
+        if: ${{ env.AI_TEST_BEARER == '' && env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SUPABASE_PUBLISHABLE_KEY != '' }}
+        run: node scripts/security/mint-test-bearer.mjs
+
+      - name: Re-register mask for minted AI_TEST_BEARER
+        # The mint script already emits ::add-mask:: for the token (and each
+        # JWT segment) within its own step, but masks registered inside one
+        # step persist for the rest of the job only if the runner saw them.
+        # Re-asserting from $GITHUB_ENV here is cheap insurance for the
+        # smoke and Playwright steps below, and registers per-segment masks
+        # so a wrapped log line can never expose a usable JWT segment.
+        if: ${{ env.AI_TEST_BEARER != '' }}
+        run: |
+          tok="$AI_TEST_BEARER"
+          echo "::add-mask::$tok"
+          # Mask each JWT segment individually too.
+          IFS='.' read -r h p s <<< "$tok"
+          [ -n "$h" ] && echo "::add-mask::$h"
+          [ -n "$p" ] && echo "::add-mask::$p"
+          [ -n "$s" ] && echo "::add-mask::$s"
+
+      - name: Smoke /api/ai with minted bearer (fail fast)
+        # Single hot-path probe: confirms the auth gate accepts the freshly
+        # minted bearer before we spend time setting up Chromium and running
+        # the full Playwright suite. Any 401/403 here means the bearer is
+        # invalid OR the route is broken — either way, fail fast with a
+        # clear, single-line error and skip the heavier work below.
+        if: ${{ env.AI_TEST_BASE_URL != '' && env.AI_TEST_BEARER != '' }}
+        run: |
+          set -u
+          url="${AI_TEST_BASE_URL%/}/api/ai"
+          body='{"mode":"chat","messages":[{"role":"user","content":"ping"}]}'
+          # -sS: quiet but show errors; -o: discard body; -w: print status only;
+          #  --max-time 25: cover cold-starts without hanging the job.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --max-time 25 \
+            -X POST "$url" \
+            -H 'content-type: application/json' \
+            -H "authorization: Bearer ${AI_TEST_BEARER}" \
+            --data "$body" || echo "000")
+          echo "POST /api/ai → HTTP $status"
+          case "$status" in
+            # 2xx = auth passed. 402/429 are upstream-gateway conditions
+            # (credits / rate-limit), not auth regressions — tolerate them so
+            # billing or quota state never breaks the gate check.
+            2??|402|429) echo "::notice::AI auth smoke OK ($status)";;
+            401|403)
+              echo "::error title=AI auth smoke failed::/api/ai returned $status with the minted bearer. The auth gate rejected a token it just issued."
+              exit 1;;
+            000)
+              echo "::error title=AI auth smoke failed::/api/ai unreachable from CI (curl exit / network error). Check AI_TEST_BASE_URL."
+              exit 1;;
+            *)
+              echo "::error title=AI auth smoke failed::/api/ai returned unexpected status $status (want 2xx, 402, or 429)."
+              exit 1;;
+          esac
+
+      - name: Explain AI auth Playwright skip
+        # Surfaces a single, unambiguous reason in the job log when the suite
+        # below is skipped, so reviewers don't have to diff `if:` expressions.
+        if: ${{ env.AI_TEST_BASE_URL == '' || env.AI_TEST_BEARER == '' }}
+        run: |
+          echo "::notice title=ai-auth Playwright suite skipped::tests/security/ai-auth.spec.ts did not run."
+          echo ""
+          echo "Reason: required environment variables are not set."
+          echo "  AI_TEST_BASE_URL : $([ -n \"$AI_TEST_BASE_URL\" ] && echo set || echo MISSING)"
+          echo "  AI_TEST_BEARER   : $([ -n \"$AI_TEST_BEARER\" ]   && echo set || echo MISSING)"
+          echo ""
+          echo "To enable this suite:"
+          echo "  1. Set repo secret AI_TEST_BASE_URL to the deployed app URL (e.g. https://<project>.lovable.app)."
+          echo "  2. Either set repo secret AI_TEST_BEARER to a valid Supabase access token,"
+          echo "     OR set SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY + SUPABASE_SERVICE_ROLE_KEY"
+          echo "     so the 'Mint AI_TEST_BEARER' step can provision one automatically."
+
+      - name: Resolve Playwright version
+        id: pw_version
+        if: ${{ env.AI_TEST_BASE_URL != '' && env.AI_TEST_BEARER != '' }}
+        # Cache key is bound to the resolved Playwright version so a Playwright
+        # bump automatically invalidates the cached browser revision.
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw_cache
+        if: ${{ env.AI_TEST_BASE_URL != '' && env.AI_TEST_BEARER != '' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw_version.outputs.version }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        if: ${{ env.AI_TEST_BASE_URL != '' && env.AI_TEST_BEARER != '' }}
+        # On a cache hit, the browser binaries are already present — install
+        # only the OS-level shared libraries Chromium needs. On a miss, do the
+        # full download + deps install.
+        run: |
+          if [ "${{ steps.pw_cache.outputs.cache-hit }}" = "true" ]; then
+            bunx playwright install-deps chromium
+          else
+            bunx playwright install --with-deps chromium
+          fi
+
+      - name: Run AI auth Playwright suite
+        id: ai_auth_playwright
+        if: ${{ env.AI_TEST_BASE_URL != '' && env.AI_TEST_BEARER != '' }}
+        run: bunx playwright test tests/security/ai-auth.spec.ts --reporter=list,html
+
+      - name: Upload Playwright artifacts (on failure)
+        # Traces, screenshots, and videos are only emitted on failure per
+        # playwright.config.ts (`trace`/`screenshot`/`video` = *on-failure).
+        # `if: failure()` scoped to the prior step ensures we only upload
+        # when the AI auth suite actually failed, not on unrelated job errors.
+        if: ${{ failure() && steps.ai_auth_playwright.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-ai-auth-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-audit
+          path: bun-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  booking-reconciliation:
+    name: Booking ledger vs cached cross-check (${{ matrix.booking }})
+    needs: audit-cli-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only meaningful when the live DB is reachable. Without SUPABASE_DB_URL
+    # the auditor can't query `bookings` / `installment_ledger`, so the job
+    # is a no-op rather than a false failure.
+    if: ${{ vars.SKIP_BOOKING_AUDIT != 'true' }}
+    strategy:
+      # Run every pinned booking even if one fails — surfaces *all* drifts
+      # in a single run instead of stopping at the first mismatch.
+      fail-fast: false
+      # Explicit cap so adding bookings keeps wall-clock flat: each booking
+      # gets its own runner and they execute in parallel up to this limit.
+      # Bump if/when GitHub-hosted concurrency headroom permits.
+      max-parallel: 10
+      matrix:
+        # Add new pinned bookings here AND drop a matching
+        # scripts/audit/expectations/<BOOKING_ID>.json snapshot. Both are
+        # required: matrix entry alone has no expectations to diff against,
+        # snapshot alone is not enforced in CI.
+        booking:
+          - BK-MA-00014
+          - BK-MA-00015
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Pre-register log masks
+        env:
+          M1: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          [ -n "$M1" ] && echo "::add-mask::$M1" || true
+
+      - uses: actions/checkout@v4
+
+      - name: Skip when SUPABASE_DB_URL is not configured
+        if: env.SUPABASE_DB_URL == ''
+        run: |
+          echo "::notice title=Booking cross-check skipped::SUPABASE_DB_URL is not set; live ledger vs cached audit cannot run for ${{ matrix.booking }}."
+          exit 0
+
+      - name: Install psql
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Export PG* env from SUPABASE_DB_URL
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import os, urllib.parse as up
+          u = up.urlparse(os.environ["SUPABASE_DB_URL"])
+          print(f"PGHOST={u.hostname}")
+          print(f"PGPORT={u.port or 5432}")
+          print(f"PGUSER={u.username}")
+          print(f"PGDATABASE={(u.path or '/postgres').lstrip('/')}")
+          print(f"PGSSLMODE=require")
+          PY
+          echo "PGPASSWORD=$(python3 -c 'import os,urllib.parse as p;print(p.urlparse(os.environ[\"SUPABASE_DB_URL\"]).password or \"\")')" >> "$GITHUB_ENV"
+
+      - name: Verify pinned expectations exist
+        # Fail loudly (rather than the auditor's generic exit 2) if a
+        # matrix entry was added without a snapshot file alongside it.
+        run: |
+          f="scripts/audit/expectations/${{ matrix.booking }}.json"
+          if [ ! -f "$f" ]; then
+            echo "::error title=Missing pinned snapshot::$f does not exist. Add it or remove ${{ matrix.booking }} from the matrix."
+            exit 1
+          fi
+          echo "✓ found $f"
+
+      - name: Cross-check ${{ matrix.booking }}
+        if: env.SUPABASE_DB_URL != ''
+        # Auditor exits 1 on any field mismatch and writes a markdown
+        # summary (live totals + diff table) to $GITHUB_STEP_SUMMARY.
+        run: node scripts/audit/booking-reconciliation.mjs ${{ matrix.booking }}
+
+  security-invariants:
+    # PR-blocking gate for the two remediations we shipped:
+    #   1. /api/ai CORS allowlist (no wildcard)
+    #   2. /security-review moved under _authenticated + admin gate
+    #
+    # This job has NO external secrets so it runs on every PR, including
+    # forks. It combines two layers of defence:
+    #   (a) Static: scripts/security/lint-security-invariants.mjs greps the
+    #       source for the forbidden shapes, and its regression harness
+    #       proves the linter actually fires when either is reintroduced.
+    #   (b) Runtime: the new Playwright suites hit the dev server built
+    #       from the PR to verify preflight/ACAO headers and the client
+    #       auth guard actually redirect signed-out visitors away from
+    #       /security-review.
+    #
+    # Required check name (kept stable so the branch ruleset can pin it):
+    #   "Security invariants (CORS + route gating)"
+    name: Security invariants (CORS + route gating)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      # Playwright config auto-starts `bun run dev` in CI and waits for
+      # http://localhost:8080. The specs read AI_TEST_BASE_URL /
+      # SECURITY_REVIEW_BASE_URL and fall back to that same URL.
+      AI_TEST_BASE_URL: http://localhost:8080
+      SECURITY_REVIEW_BASE_URL: http://localhost:8080
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun deps
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install deps (cache miss only)
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: "Static: lint security invariants (ai_wildcard_cors, public_security_review)"
+        # Grep-level check — cheap, runs first so a reintroduced wildcard
+        # or a resurrected public /security-review route fails the job
+        # in seconds without waiting for Chromium to boot.
+        run: bun run check:security:invariants
+
+      - name: "Static: linter self-regression (proves the linter actually fires)"
+        # Temporarily patches the source to reintroduce each violation and
+        # asserts the linter exits non-zero. Guards against the linter
+        # silently going toothless after an unrelated refactor.
+        run: bun run check:security:invariants:regression
+
+      - name: Resolve Playwright version
+        id: pw_version
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw_cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw_version.outputs.version }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium
+        # Chromium-only: the two new specs run under the
+        # `chromium-reduced-motion` project. WebKit isn't required for
+        # these regressions and would double the runtime for no signal.
+        run: |
+          if [ "${{ steps.pw_cache.outputs.cache-hit }}" = "true" ]; then
+            bunx playwright install-deps chromium
+          else
+            bunx playwright install --with-deps chromium
+          fi
+
+      - name: "Runtime: /api/ai CORS + /security-review auth gating (Playwright)"
+        id: security_invariants_playwright
+        # playwright.config.ts auto-starts `bun run dev` in CI (webServer
+        # block gated on process.env.CI) and waits for the base URL to
+        # respond before the tests run. --project pins to Chromium.
+        run: |
+          bunx playwright test \
+            tests/security/ai-cors.spec.ts \
+            tests/security/security-review-auth.spec.ts \
+            --project=chromium-reduced-motion \
+            --reporter=list,html
+
+      - name: Upload Playwright artifacts (on failure)
+        if: ${{ failure() && steps.security_invariants_playwright.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-security-invariants-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14

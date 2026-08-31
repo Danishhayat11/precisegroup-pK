@@ -1,0 +1,123 @@
+name: Tenant isolation check
+
+# Hits the /api/public/isolation-check endpoint on the deployed app and fails
+# the build when any cross-tenant data leakage is detected.
+#
+# Required repository secrets:
+#   CI_ISOLATION_SECRET   — HMAC key shared with the server env var of the
+#                           same name (used to sign the request body).
+#   ISOLATION_CHECK_URL   — full URL of the endpoint, e.g.
+#                           https://precisegroup-pk.lovable.app/api/public/isolation-check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/audit-tenant-scope.mjs"
+      - ".tenant-scope-audit-baseline.json"
+      - "src/integrations/supabase/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/tenant-isolation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/audit-tenant-scope.mjs"
+      - ".tenant-scope-audit-baseline.json"
+      - "src/integrations/supabase/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/tenant-isolation.yml"
+  schedule:
+    # Every day at 06:00 UTC — catch drift even without code changes.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: tenant-isolation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tenant-scope-audit:
+    name: client query company_id audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run tenant-scope audit
+        run: node scripts/audit-tenant-scope.mjs
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tenant-scope-audit
+          path: reports/tenant-scope-audit.json
+          retention-days: 14
+
+  isolation-check:
+    name: cross-tenant leakage probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify required secrets
+        env:
+          URL: ${{ secrets.ISOLATION_CHECK_URL }}
+          KEY: ${{ secrets.CI_ISOLATION_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL:-}" ]; then
+            echo "::error::Missing repository secret ISOLATION_CHECK_URL"; exit 1
+          fi
+          if [ -z "${KEY:-}" ]; then
+            echo "::error::Missing repository secret CI_ISOLATION_SECRET"; exit 1
+          fi
+
+      - name: Call isolation endpoint
+        id: call
+        env:
+          URL: ${{ secrets.ISOLATION_CHECK_URL }}
+          KEY: ${{ secrets.CI_ISOLATION_SECRET }}
+        run: |
+          set -euo pipefail
+          BODY="{\"triggered_by\":\"github-actions\",\"run_id\":\"${GITHUB_RUN_ID}\",\"sha\":\"${GITHUB_SHA}\"}"
+          SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$KEY" | awk '{print $2}')
+          echo "Calling $URL"
+          HTTP=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST "$URL" \
+            -H "content-type: application/json" \
+            -H "x-ci-signature: $SIG" \
+            --data "$BODY") || true
+          echo "http_status=$HTTP" | tee -a "$GITHUB_OUTPUT"
+          echo "--- Response body ---"
+          cat response.json || true
+          echo
+          echo "---------------------"
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Isolation endpoint returned HTTP $HTTP — cross-tenant leakage or configuration failure."
+            exit 1
+          fi
+
+      - name: Assert ok=true
+        run: |
+          set -euo pipefail
+          OK=$(node -e "const r=require('./response.json'); process.stdout.write(String(r.ok===true));")
+          if [ "$OK" != "true" ]; then
+            echo "::error::Isolation report ok=false — see failing checks above."
+            node -e "const r=require('./response.json'); (r.checks||[]).filter(c=>!c.passed).forEach(c=>console.log('FAIL', c.name, '-', c.detail));"
+            exit 1
+          fi
+          echo "All isolation checks passed."
+
+      - name: Upload response on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolation-check-response
+          path: response.json
+          retention-days: 7

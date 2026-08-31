@@ -1,0 +1,147 @@
+{
+  "generatedAt": "2026-07-06T07:01:07.474Z",
+  "baseUrl": "http://localhost:8080",
+  "hasAuthSession": true,
+  "viewports": {
+    "mobile": {
+      "width": 375,
+      "height": 1200
+    },
+    "tablet": {
+      "width": 820,
+      "height": 1180
+    },
+    "desktop": {
+      "width": 1440,
+      "height": 1400
+    }
+  },
+  "results": [
+    {
+      "device": "mobile",
+      "route": "site",
+      "path": "/site",
+      "viewport": {
+        "width": 375,
+        "height": 1200
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/mobile-site.png",
+      "durationMs": 499
+    },
+    {
+      "device": "mobile",
+      "route": "login",
+      "path": "/login",
+      "viewport": {
+        "width": 375,
+        "height": 1200
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/mobile-login.png",
+      "durationMs": 991
+    },
+    {
+      "device": "mobile",
+      "route": "dashboard",
+      "path": "/dashboard",
+      "viewport": {
+        "width": 375,
+        "height": 1200
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/mobile-dashboard.png",
+      "durationMs": 8153
+    },
+    {
+      "device": "tablet",
+      "route": "site",
+      "path": "/site",
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/tablet-site.png",
+      "durationMs": 697
+    },
+    {
+      "device": "tablet",
+      "route": "login",
+      "path": "/login",
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/tablet-login.png",
+      "durationMs": 1508
+    },
+    {
+      "device": "tablet",
+      "route": "dashboard",
+      "path": "/dashboard",
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/tablet-dashboard.png",
+      "durationMs": 2517
+    },
+    {
+      "device": "desktop",
+      "route": "site",
+      "path": "/site",
+      "viewport": {
+        "width": 1440,
+        "height": 1400
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/desktop-site.png",
+      "durationMs": 986
+    },
+    {
+      "device": "desktop",
+      "route": "login",
+      "path": "/login",
+      "viewport": {
+        "width": 1440,
+        "height": 1400
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/desktop-login.png",
+      "durationMs": 1622
+    },
+    {
+      "device": "desktop",
+      "route": "dashboard",
+      "path": "/dashboard",
+      "viewport": {
+        "width": 1440,
+        "height": 1400
+      },
+      "status": "ok",
+      "overflowPx": 0,
+      "offenders": [],
+      "screenshot": "/responsive-audit/screenshots/desktop-dashboard.png",
+      "durationMs": 2664
+    }
+  ]
+}

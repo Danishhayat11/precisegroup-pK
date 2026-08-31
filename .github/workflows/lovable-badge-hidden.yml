@@ -1,0 +1,161 @@
+name: Lovable badge visibility
+
+# Guards the Lovable branding-badge suppression by running the badge e2e
+# spec once in each environment configuration:
+#
+#   - VITE_HIDE_LOVABLE_BADGE=true   → override active, badge must be hidden
+#   - VITE_HIDE_LOVABLE_BADGE=false  → override disabled, spec self-skips
+#
+# The second leg is the important guard: it proves the flag actually toggles
+# behavior end-to-end (attribute flips to "false", spec calls test.skip()
+# instead of failing). If either leg's outcome ever inverts, a regression
+# has landed in the CSS override, the runtime purge script, or the
+# `data-hide-lovable-badge` wiring in src/routes/__root.tsx.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/routes/__root.tsx"
+      - "src/styles.css"
+      - "src/lib/lovable-badge-purge.ts"
+      - "tests/e2e/lovable-badge-hidden.spec.ts"
+      - "playwright.config.ts"
+      - ".github/workflows/lovable-badge-hidden.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/routes/__root.tsx"
+      - "src/styles.css"
+      - "src/lib/lovable-badge-purge.ts"
+      - "tests/e2e/lovable-badge-hidden.spec.ts"
+      - "playwright.config.ts"
+      - ".github/workflows/lovable-badge-hidden.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: lovable-badge-hidden-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  badge-e2e:
+    name: badge hidden (VITE_HIDE_LOVABLE_BADGE=${{ matrix.hide_badge }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Override ON — badge (and any shadow-root injection) must be gone.
+          # The spec asserts hidden and non-visible on every public route.
+          - hide_badge: "true"
+            artifact_suffix: enabled
+          # Override OFF — spec detects data-hide-lovable-badge="false" and
+          # calls test.skip(). Green here proves the flag actually flipped
+          # the attribute at build time; a failure means the toggle regressed
+          # (attribute stuck on "true", or spec no longer honors the skip).
+          - hide_badge: "false"
+            artifact_suffix: disabled
+    env:
+      CI: "true"
+      VITE_HIDE_LOVABLE_BADGE: ${{ matrix.hide_badge }}
+      # Public Supabase build vars — required for `bun run dev` to boot.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          set -euo pipefail
+          version=$(node -e "console.log(require('@playwright/test/package.json').version)")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-chromium
+          restore-keys: |
+            ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      - name: Print effective badge flag
+        run: |
+          echo "VITE_HIDE_LOVABLE_BADGE=${VITE_HIDE_LOVABLE_BADGE}"
+          {
+            echo "### Lovable badge matrix leg"
+            echo ""
+            echo "| Flag | Value |"
+            echo "| --- | --- |"
+            echo "| \`VITE_HIDE_LOVABLE_BADGE\` | \`${VITE_HIDE_LOVABLE_BADGE}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run Lovable badge e2e
+        # playwright.config.ts auto-starts `bun run dev` under CI; the dev
+        # server inherits VITE_HIDE_LOVABLE_BADGE from this job's env,
+        # so the leg's flag value flows through to the browser build.
+        run: bunx playwright test tests/e2e/lovable-badge-hidden.spec.ts --project=chromium-reduced-motion --reporter=list,html
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lovable-badge-hidden-report-${{ matrix.artifact_suffix }}
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload traces / screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lovable-badge-hidden-artifacts-${{ matrix.artifact_suffix }}
+          path: test-results
+          retention-days: 7

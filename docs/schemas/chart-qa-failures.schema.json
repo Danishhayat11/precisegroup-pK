@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lovable.dev/schemas/chart-qa-failures.schema.json",
+  "title": "chart-qa-failures.json",
+  "description": "Sidecar payload emitted by the Chart QA export on /chart-preview when 'Include failure JSON' is enabled. Produced by buildFailuresPayload in src/lib/chartQaFailuresPayload.ts. The `environment` property is optional and is HARD-OMITTED (the key is fully absent — not null, not undefined, not {}) whenever `environmentIncluded` is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generatedAt",
+    "viewport",
+    "enabledChartTypes",
+    "appTheme",
+    "environmentIncluded",
+    "expectedSeriesOrder",
+    "fullSweep",
+    "failures"
+  ],
+  "properties": {
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 client timestamp at export time."
+    },
+    "viewport": {
+      "type": "string",
+      "description": "Rendered viewport label, e.g. '1280px' or 'full width'.",
+      "examples": ["1280px", "full width"]
+    },
+    "enabledChartTypes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Chart type IDs included in the sweep."
+    },
+    "appTheme": {
+      "type": "string",
+      "enum": ["light", "dark"],
+      "description": "Theme active when the export ran."
+    },
+    "environmentIncluded": {
+      "type": "boolean",
+      "description": "Mirrors the 'Include environment block' toggle. When false, the `environment` property MUST be absent from this document."
+    },
+    "expectedSeriesOrder": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Human-readable series labels in the order the UI expects to render."
+    },
+    "fullSweep": {
+      "description": "Per-step PASS/FAIL for both themes, run duration, and overall counts. Shape is intentionally open — treat as opaque for schema validation.",
+      "type": ["object", "array", "null"]
+    },
+    "failures": {
+      "type": "array",
+      "description": "Interaction-tester failures captured during the sweep. May be empty.",
+      "items": { "type": "object" }
+    },
+    "environment": {
+      "type": "object",
+      "description": "Runtime environment snapshot. Present ONLY when environmentIncluded is true. When environmentIncluded is false, this property MUST NOT appear in the document (see allOf branch below).",
+      "additionalProperties": true,
+      "properties": {
+        "userAgent": { "type": "string" },
+        "devicePixelRatio": { "type": "number" },
+        "viewport": {
+          "type": "object",
+          "properties": {
+            "width": { "type": "number" },
+            "height": { "type": "number" }
+          },
+          "required": ["width", "height"],
+          "additionalProperties": false
+        },
+        "buildMode": { "type": "string" },
+        "libraryVersions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "title": "environment presence is gated by environmentIncluded",
+      "if": {
+        "properties": { "environmentIncluded": { "const": false } },
+        "required": ["environmentIncluded"]
+      },
+      "then": {
+        "description": "When environmentIncluded is false the `environment` key MUST be completely absent from the document — not null, not an empty object.",
+        "not": { "required": ["environment"] }
+      },
+      "else": {
+        "description": "When environmentIncluded is true the `environment` key MUST be present.",
+        "required": ["environment"]
+      }
+    }
+  ],
+  "examples": [
+    {
+      "generatedAt": "2026-07-04T00:00:00.000Z",
+      "viewport": "1280px",
+      "enabledChartTypes": ["bar", "line"],
+      "appTheme": "light",
+      "environmentIncluded": false,
+      "expectedSeriesOrder": ["Revenue", "Cost"],
+      "fullSweep": { "steps": [] },
+      "failures": []
+    },
+    {
+      "generatedAt": "2026-07-04T00:00:00.000Z",
+      "viewport": "1280px",
+      "enabledChartTypes": ["bar", "line"],
+      "appTheme": "dark",
+      "environmentIncluded": true,
+      "expectedSeriesOrder": ["Revenue", "Cost"],
+      "fullSweep": { "steps": [] },
+      "failures": [],
+      "environment": {
+        "userAgent": "Mozilla/5.0",
+        "devicePixelRatio": 2,
+        "viewport": { "width": 1280, "height": 1800 },
+        "buildMode": "production",
+        "libraryVersions": { "recharts": "2.x", "react": "19.x" }
+      }
+    }
+  ]
+}

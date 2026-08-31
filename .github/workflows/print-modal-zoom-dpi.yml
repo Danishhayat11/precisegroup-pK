@@ -1,0 +1,163 @@
+name: Print modal zoom / DPI
+
+# Runs tests/a11y/print-modal-zoom-dpi.spec.ts on every PR that could
+# affect the print-preview auto-fit math under CSS zoom or hi-DPI
+# devicePixelRatio. The spec sweeps portrait mobile (390×844) across:
+#   - browser-zoom levels { 0.9, 1.25 } (simulated via CSS `zoom`)
+#   - devicePixelRatio { 2 (Retina), 3 (hi-DPI phone) }
+# For each case it asserts:
+#   1. short receipt: exactly one .pp-sheet with visibleRatio ≥ 0.5
+#   2. long receipt: paginates into ≥ 2 sheets, first sheet fits, and
+#      the "Ready · N page(s)" chip count matches the DOM sheet count
+# Complements print-modal-fit-lengths (pins the length-extreme contract)
+# and print-modal-mobile-render (pins mobile render integrity). Split
+# into its own workflow so a failure name pinpoints the DPI/zoom axis
+# without opening the report.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/a11y/print-modal-zoom-dpi.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts-snapshots/**"
+      - "src/components/PrintPreviewModal.tsx"
+      - "src/routes/test-print-modal.tsx"
+      - "src/lib/letterhead*"
+      - "src/lib/printFlow*"
+      - "src/lib/paperPresets*"
+      - "src/lib/logos*"
+      - "playwright.config.ts"
+      - ".github/workflows/print-modal-zoom-dpi.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/a11y/print-modal-zoom-dpi.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts-snapshots/**"
+      - "src/components/PrintPreviewModal.tsx"
+      - "src/routes/test-print-modal.tsx"
+      - ".github/workflows/print-modal-zoom-dpi.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: print-modal-zoom-dpi-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  zoom-dpi:
+    name: Zoom / DPI (chromium-reduced-motion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      - name: Cache Playwright browser (chromium)
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      - name: Validate Playwright system deps
+        run: bash .github/scripts/validate-playwright-apt-deps.sh chromium
+
+      - name: Run print modal zoom/DPI specs (numeric + visual)
+        run: |
+          bunx playwright test \
+            tests/a11y/print-modal-zoom-dpi.spec.ts \
+            tests/a11y/print-modal-zoom-dpi-visual.spec.ts \
+            --project=chromium-reduced-motion \
+            --retries=1 \
+            --reporter=list,html \
+            --output=test-results
+
+      - name: Upload HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-zoom-dpi-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload traces, failure snapshots & visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-zoom-dpi-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*-actual.png
+            test-results/**/*-expected.png
+            test-results/**/*-diff.png
+            test-results/**/sheet-*.png
+            test-results/**/sheet-*.json
+            test-results/**/width-spread-*.json
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: ignore

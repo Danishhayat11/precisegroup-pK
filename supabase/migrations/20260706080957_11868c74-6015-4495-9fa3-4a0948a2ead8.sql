@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS project_type text CHECK (project_type IN ('Residential','Commercial','Mixed-Use'));

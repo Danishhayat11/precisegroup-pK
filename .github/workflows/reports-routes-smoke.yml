@@ -1,0 +1,107 @@
+name: Reports routes smoke (Playwright)
+
+# Runs the report route Playwright smoke spec on every pull request and on
+# push to main. The spec (`tests/e2e/reports-routes-signed-in.spec.ts`)
+# mocks Supabase auth + `_serverFn/*` responses, so it needs no real
+# backend — only the Vite dev server, which `playwright.config.ts` starts
+# automatically when `CI=true`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/routes/_authenticated/reports*"
+      - "src/components/reports.tsx"
+      - "src/lib/reports.functions.ts"
+      - "tests/e2e/reports-routes-signed-in.spec.ts"
+      - "playwright.config.ts"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/reports-routes-smoke.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/routes/_authenticated/reports*"
+      - "src/components/reports.tsx"
+      - "src/lib/reports.functions.ts"
+      - "tests/e2e/reports-routes-signed-in.spec.ts"
+      - "playwright.config.ts"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/reports-routes-smoke.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: reports-routes-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: /reports/* renders under mocked auth
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Cache key bound to the resolved Playwright version so a bump
+      # automatically invalidates the cached browser revision.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          set -euo pipefail
+          version=$(node -e "console.log(require('@playwright/test/package.json').version)")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-chromium
+          restore-keys: |
+            ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      - name: Run reports routes smoke spec
+        env:
+          CI: "true"
+        # `playwright.config.ts` starts `bun run dev` on :8080 when CI=true.
+        # The spec mocks `/auth/v1/**` and `/_serverFn/**`, so no live
+        # Supabase or network egress is required.
+        run: bunx playwright test tests/e2e/reports-routes-signed-in.spec.ts --project=chromium-reduced-motion
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-routes-smoke-report
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload traces / screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-routes-smoke-artifacts
+          path: test-results
+          retention-days: 7

@@ -1,0 +1,148 @@
+name: Route tree smoke
+
+# Guards `src/routeTree.gen.ts` generation + serving and the public route
+# surface. Runs on every PR and on push to main. Fast (< 3 min) — meant
+# to fail LOUDLY before the heavier a11y / responsive suites run.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/routes/**"
+      - "src/router.tsx"
+      - "src/routeTree.gen.ts"
+      - "vite.config.ts"
+      - "tests/smoke/route-tree.spec.ts"
+      - "playwright.config.ts"
+      - ".github/workflows/route-tree-smoke.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/routes/**"
+      - "src/router.tsx"
+      - "src/routeTree.gen.ts"
+      - "vite.config.ts"
+      - "tests/smoke/route-tree.spec.ts"
+      - "playwright.config.ts"
+      - ".github/workflows/route-tree-smoke.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: route-tree-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: routeTree generation + public routes load
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Cache key bound to the resolved Playwright version so a Playwright
+      # bump automatically invalidates the cached browser revision.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          set -euo pipefail
+          version=$(node -e "console.log(require('@playwright/test/package.json').version)")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-chromium
+          restore-keys: |
+            ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — cache miss"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — cache hit"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run routeTree smoke
+        env:
+          CI: "true"
+        # `playwright.config.ts` auto-starts `bun run dev` on port 8080
+        # under CI, so the spec's fetch of /src/routeTree.gen.ts hits
+        # the live dev server (the only mode where that URL exists).
+        run: bunx playwright test tests/smoke/route-tree.spec.ts --project=chromium-reduced-motion
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-tree-smoke-report
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload traces / screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-tree-smoke-artifacts
+          path: test-results
+          retention-days: 7

@@ -1,0 +1,49 @@
+name: Tap-target audit (WCAG 2.5.5)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Only UI source files can introduce tap-target violations; scanner
+      # (.mjs), allowlist (.json), and this workflow itself round out the
+      # trigger set so infra changes still re-run the gate.
+      - "src/**/*.tsx"
+      - "src/**/*.jsx"
+      - "scripts/ci/tap-target-audit.mjs"
+      - "scripts/ci/tap-target-audit.allowlist.json"
+      - ".github/workflows/tap-target-audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/*.tsx"
+      - "src/**/*.jsx"
+      - "scripts/ci/tap-target-audit.mjs"
+      - "scripts/ci/tap-target-audit.allowlist.json"
+      - ".github/workflows/tap-target-audit.yml"
+
+concurrency:
+  group: tap-target-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tap-targets:
+    name: Reject tap targets smaller than 44×44 px
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run tap-target audit (emits ::error annotations on PRs)
+        # GITHUB_ACTIONS=true is set by the runner; the script emits one
+        # `::error file=…,line=…` workflow command per violation so failing
+        # tap targets appear as inline annotations in the PR diff.
+        run: node scripts/ci/tap-target-audit.mjs

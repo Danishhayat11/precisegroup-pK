@@ -1,0 +1,5 @@
+# Precise Realtors & Builders ERP
+
+> Internal enterprise resource planning system for Precise Realtors & Builders — manages bookings, units, payments, installment ledgers, adjustments, and client documents for the Manal Arcade project.
+
+This application is an authenticated, staff-only workspace. There are no public marketing or content pages to crawl; every functional surface (Dashboard, Bookings, Payments, Installment Ledger, Adjustments, Document Vault, Reports, Settings) sits behind sign-in and is intended only for authorised employees of Precise Realtors & Builders.

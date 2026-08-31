@@ -1,0 +1,622 @@
+name: Responsive overflow guard
+
+# Runs the responsive overflow + 44×44 tap-target E2E gate
+# (`tests/a11y/responsive-breakpoints.spec.ts`) on every PR to main.
+#
+# The spec walks /site, /login, and /dashboard at three viewports —
+# mobile (375px), tablet (820px), desktop (1440px) — and asserts:
+#   • ZERO horizontal overflow (page never scrolls sideways, and no
+#     descendant escapes the viewport without an ancestor clipping it).
+#   • Every visible interactive control ≥ 44×44 CSS px on touch
+#     viewports (WCAG 2.5.5).
+#
+# Split into ONE JOB PER ROUTE so a failure in /dashboard doesn't hide
+# a /site or /login regression (and vice versa), and so the authed
+# /dashboard job — which needs LOVABLE_BROWSER_SUPABASE_* secrets —
+# can cleanly skip when those secrets are absent (external forks,
+# rotation windows) without failing the whole workflow. /site and
+# /login still gate the merge in that case.
+#
+# Gated by paths so unrelated PRs don't pay the ~4-minute cost.
+# Chromium-only because the assertions test layout math, not
+# engine-specific quirks — the breadcrumbs-overflow-keyboard suite
+# owns the cross-browser matrix for interactive contracts.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/a11y/responsive-breakpoints.spec.ts"
+      - "src/routes/**"
+      - "src/pages/**"
+      - "src/components/AppShell.tsx"
+      - "src/components/site/**"
+      - "src/components/ui/**"
+      - "src/styles.css"
+      - "src/index.css"
+      - "tailwind.config.*"
+      - "playwright.config.ts"
+      - "package.json"
+      - "bun.lock"
+      - "bun.lockb"
+      - ".github/workflows/responsive-overflow-guard.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/a11y/responsive-breakpoints.spec.ts"
+      - "src/routes/**"
+      - "src/pages/**"
+      - "src/components/AppShell.tsx"
+      - "src/components/site/**"
+      - "src/components/ui/**"
+      - "src/styles.css"
+      - "src/index.css"
+      - "tailwind.config.*"
+      - "playwright.config.ts"
+      - ".github/workflows/responsive-overflow-guard.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: responsive-overflow-guard-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------
+  # Preflight: validate the always-required public Supabase secrets and
+  # detect whether the browser-auth secrets (needed only for the
+  # dashboard job) are present. Runs once so per-route jobs don't each
+  # re-check. Exposes `has_dashboard_secrets` as an output the
+  # dashboard job gates on.
+  # ------------------------------------------------------------------
+  preflight:
+    name: Preflight (validate secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      has_dashboard_secrets: ${{ steps.check.outputs.has_dashboard_secrets }}
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      LOVABLE_BROWSER_SUPABASE_STORAGE_KEY: ${{ secrets.LOVABLE_BROWSER_SUPABASE_STORAGE_KEY }}
+      LOVABLE_BROWSER_SUPABASE_SESSION_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_SESSION_JSON }}
+    steps:
+      - name: Validate & detect secrets
+        id: check
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions before re-running this workflow."
+            exit 1
+          fi
+          if [ -n "$LOVABLE_BROWSER_SUPABASE_STORAGE_KEY" ] && [ -n "$LOVABLE_BROWSER_SUPABASE_SESSION_JSON" ]; then
+            echo "has_dashboard_secrets=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Dashboard secrets present — /dashboard job will run."
+          else
+            echo "has_dashboard_secrets=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::LOVABLE_BROWSER_SUPABASE_* secrets not set — the /dashboard job will be skipped. /site and /login still gate."
+          fi
+
+  # ------------------------------------------------------------------
+  # Per-route jobs. Each runs the spec with a Playwright `--grep`
+  # filter that matches only that route's test name (see
+  # `tests/a11y/responsive-breakpoints.spec.ts` — tests are titled
+  # `<route> — no horizontal overflow[…]`). One route failing no
+  # longer masks or blocks the others.
+  # ------------------------------------------------------------------
+  site:
+    name: /site (chromium)
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      # Smoke mode on push: single breakpoint per commit to keep CI cheap.
+      # PRs (and workflow_dispatch) get the full mobile/tablet/desktop matrix.
+      RESPONSIVE_SMOKE_DEVICES: ${{ github.event_name == 'push' && 'mobile' || '' }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Print tool versions
+        run: |
+          echo "::group::Versions"
+          bun --version
+          bunx playwright --version
+          node --version || true
+          echo "::endgroup::"
+      - name: Run responsive guard — /site only
+        run: |
+          bunx playwright test tests/a11y/responsive-breakpoints.spec.ts \
+            --project=chromium-reduced-motion \
+            --grep "site — " \
+            --retries=1 \
+            --reporter=list,html \
+            --output=test-results
+      - name: Upload HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-overflow-guard-report-site
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload traces & failure snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-overflow-guard-traces-site
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*.webm
+          retention-days: 7
+          if-no-files-found: ignore
+
+  login:
+    name: /login (chromium)
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      # Smoke mode on push: single breakpoint per commit to keep CI cheap.
+      # PRs (and workflow_dispatch) get the full mobile/tablet/desktop matrix.
+      RESPONSIVE_SMOKE_DEVICES: ${{ github.event_name == 'push' && 'mobile' || '' }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Print tool versions
+        run: |
+          echo "::group::Versions"
+          bun --version
+          bunx playwright --version
+          node --version || true
+          echo "::endgroup::"
+      - name: Run responsive guard — /login only
+        run: |
+          bunx playwright test tests/a11y/responsive-breakpoints.spec.ts \
+            --project=chromium-reduced-motion \
+            --grep "login — " \
+            --retries=1 \
+            --reporter=list,html \
+            --output=test-results
+      - name: Upload HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-overflow-guard-report-login
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload traces & failure snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-overflow-guard-traces-login
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*.webm
+          retention-days: 7
+          if-no-files-found: ignore
+
+  dashboard:
+    name: /dashboard (chromium)
+    needs: preflight
+    # Skip cleanly (not fail) when the browser-auth secrets aren't
+    # available. /site and /login still gate the merge.
+    if: needs.preflight.outputs.has_dashboard_secrets == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      # Smoke mode on push: single breakpoint per commit to keep CI cheap.
+      # PRs (and workflow_dispatch) get the full mobile/tablet/desktop matrix.
+      RESPONSIVE_SMOKE_DEVICES: ${{ github.event_name == 'push' && 'mobile' || '' }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      LOVABLE_BROWSER_SUPABASE_STORAGE_KEY: ${{ secrets.LOVABLE_BROWSER_SUPABASE_STORAGE_KEY }}
+      LOVABLE_BROWSER_SUPABASE_SESSION_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_SESSION_JSON }}
+      LOVABLE_BROWSER_SUPABASE_COOKIES_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_COOKIES_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Print tool versions
+        run: |
+          echo "::group::Versions"
+          bun --version
+          bunx playwright --version
+          node --version || true
+          echo "::endgroup::"
+      - name: Run responsive guard — /dashboard only
+        run: |
+          bunx playwright test tests/a11y/responsive-breakpoints.spec.ts \
+            --project=chromium-reduced-motion \
+            --grep "dashboard — " \
+            --retries=1 \
+            --reporter=list,html \
+            --output=test-results
+      - name: Upload HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-overflow-guard-report-dashboard
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload traces & failure snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-overflow-guard-traces-dashboard
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*.webm
+          retention-days: 7
+          if-no-files-found: ignore

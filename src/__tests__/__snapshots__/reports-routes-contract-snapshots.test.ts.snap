@@ -1,0 +1,297 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`report loader contract snapshots > reports.overdue > Zod schema shape matches snapshot (breaking schema change fails here) > reports.overdue schema 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "rows": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "booking_id": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "days_overdue": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "due_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "ledger_id": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "paid_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "term_no": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "unit_no": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+        },
+        "required": [
+          "ledger_id",
+          "booking_id",
+          "client_name",
+          "project",
+          "unit_no",
+          "term_no",
+          "due_date",
+          "due_amount",
+          "paid_amount",
+          "days_overdue",
+          "status",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "rows",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`report loader contract snapshots > reports.overdue > runtime response shape matches snapshot (breaking loader change fails here) > reports.overdue runtime shape 1`] = `
+{
+  "$": "object",
+  "$.rows": "array",
+  "$.rows[]": "object",
+  "$.rows[].booking_id": "null",
+  "$.rows[].client_name": "null",
+  "$.rows[].days_overdue": "null",
+  "$.rows[].due_amount": "null",
+  "$.rows[].due_date": "null",
+  "$.rows[].ledger_id": "string",
+  "$.rows[].paid_amount": "null",
+  "$.rows[].project": "null",
+  "$.rows[].status": "null",
+  "$.rows[].term_no": "null",
+  "$.rows[].unit_no": "null",
+}
+`;
+
+exports[`report loader contract snapshots > reports.payments > Zod schema shape matches snapshot (breaking schema change fails here) > reports.payments schema 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "rows": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "payment_date": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "payment_head": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "payment_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "receipt_no": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+          "unit_no": {
+            "anyOf": [
+              {
+                "type": "string",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+        },
+        "required": [
+          "receipt_no",
+          "payment_date",
+          "client_name",
+          "project",
+          "unit_no",
+          "payment_head",
+          "payment_mode",
+          "amount",
+          "status",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "rows",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`report loader contract snapshots > reports.payments > runtime response shape matches snapshot (breaking loader change fails here) > reports.payments runtime shape 1`] = `
+{
+  "$": "object",
+  "$.rows": "array",
+  "$.rows[]": "object",
+  "$.rows[].amount": "null",
+  "$.rows[].client_name": "null",
+  "$.rows[].payment_date": "null",
+  "$.rows[].payment_head": "null",
+  "$.rows[].payment_mode": "null",
+  "$.rows[].project": "null",
+  "$.rows[].receipt_no": "string",
+  "$.rows[].status": "null",
+  "$.rows[].unit_no": "null",
+}
+`;

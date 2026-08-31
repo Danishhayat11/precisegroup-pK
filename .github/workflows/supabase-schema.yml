@@ -1,0 +1,91 @@
+name: Supabase schema check
+
+# Fails the build if any src/**/*.{ts,tsx} references a Supabase column that
+# doesn't exist in src/integrations/supabase/types.ts (the generated schema).
+# Catches regressions like `payments.payment_id` (real column: `receipt_no`).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: supabase-schema-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-columns:
+    name: Validate .from().select/.eq columns against generated types
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run schema-aware column validator
+        run: node scripts/ci/validate-supabase-columns.mjs
+      - name: Regression — validator must fail on payments.payment_id
+        env:
+          CI_ARTIFACT_DIR: ${{ github.workspace }}/ci-artifacts
+        run: bash scripts/ci/tests/validator-catches-payment-id.sh
+      - name: Regression — validator must fail on aliased payments.payment_id
+        env:
+          CI_ARTIFACT_DIR: ${{ github.workspace }}/ci-artifacts
+        run: bash scripts/ci/tests/validator-catches-payment-id-alias.sh
+      - name: Positive control — validator must pass on safe payments columns
+        env:
+          CI_ARTIFACT_DIR: ${{ github.workspace }}/ci-artifacts
+        run: bash scripts/ci/tests/validator-passes-safe-payments.sh
+      - name: Upload validator artifacts on failure
+        id: upload_failure_artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-payment-id-artifacts
+          path: ci-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+      # Positive-control artifacts are uploaded on every run (pass or fail)
+      # so schema-change diffs and false-positive investigations always have
+      # a durable JSON + metadata record from the safe-columns fixture.
+      - name: Upload positive-control validator artifacts (always)
+        id: upload_positive_artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-passes-safe-payments-artifacts
+          path: ci-artifacts/validator-passes-safe-payments.*
+          if-no-files-found: warn
+          retention-days: 14
+      # Link the uploaded artifacts directly from the job's Summary tab so
+      # anyone triaging a red build (or diffing a passing schema change) can
+      # jump straight to the JSON + metadata without hunting through the
+      # Artifacts panel. upload-artifact@v4 exposes `artifact-url` as a step
+      # output; we render whichever links exist for this run.
+      - name: Link validator artifacts in step summary
+        if: always()
+        env:
+          POSITIVE_URL: ${{ steps.upload_positive_artifacts.outputs.artifact-url }}
+          FAILURE_URL: ${{ steps.upload_failure_artifacts.outputs.artifact-url }}
+        run: |
+          {
+            echo "## Supabase schema validator artifacts"
+            echo ""
+            if [ -n "${POSITIVE_URL:-}" ]; then
+              echo "- ✅ [Positive control (safe payments columns)](${POSITIVE_URL}) — uploaded every run"
+            else
+              echo "- ⚠️ Positive-control artifact not available for this run"
+            fi
+            if [ -n "${FAILURE_URL:-}" ]; then
+              echo "- ❌ [Failure artifacts (payment_id regressions)](${FAILURE_URL}) — uploaded on failure"
+            else
+              echo "- ✅ No failure artifacts (all validator regression tests passed)"
+            fi
+            echo ""
+            echo "Each artifact bundle contains the validator's raw \`--json\` output plus a \`.meta.txt\` sidecar (fixture path, exit status, capture timestamp)."
+          } >> "$GITHUB_STEP_SUMMARY"

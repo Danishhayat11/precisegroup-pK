@@ -1,0 +1,98 @@
+# Leadership section visual regression — screenshots #leadership on /site
+# and diffs it against committed baselines to catch styling or picture-layout
+# regressions in the team cards.
+#
+# On first run (or after an intentional visual change) baselines must be
+# regenerated locally with:
+#   bun run test:visual:leadership:update
+# and committed to tests/visual/site-leadership-visual.spec.ts-snapshots/.
+name: site-leadership-visual
+
+on:
+  pull_request:
+    paths:
+      # TeamHeadshot and any component whose styling can affect the grid.
+      - "src/components/site/**"
+      # The route that renders #leadership and its copy.
+      - "src/routes/site.index.tsx"
+      # Portrait masters, AVIF/WebP variants, and LQIP placeholders.
+      - "src/assets/site/**"
+      # Global tokens / theme — dark+light captures depend on these.
+      - "src/styles.css"
+      - "src/styles/**"
+      # The spec + committed baselines.
+      - "tests/visual/site-leadership-visual.spec.ts"
+      - "tests/visual/site-leadership-visual.spec.ts-snapshots/**"
+      - "playwright.config.ts"
+      # Dependency + workflow changes that affect the runner itself.
+      - "package.json"
+      - "bun.lockb"
+      - ".github/workflows/site-leadership-visual.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: site-leadership-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
+      - name: Start dev server
+        run: |
+          bun run dev &
+          echo $! > .devserver.pid
+          # Wait for Vite to be reachable before running Playwright.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080 >/dev/null; then
+              echo "dev server up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "dev server failed to start"; exit 1
+
+      - name: Run leadership visual regression
+        # Force the HTML reporter + traces/screenshots/videos on every run
+        # (not just on failure) so the artifact upload below always has
+        # something reviewers can open in-browser.
+        env:
+          PWTEST_HTML_REPORT_OPEN: never
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p test-artifacts
+          bun run test:visual:leadership 2>&1 | tee test-artifacts/playwright.log
+
+      - name: Upload Playwright artifacts
+        # `always()` — publish the HTML report, traces, per-test screenshots,
+        # actual/expected/diff PNGs, videos, and the raw stdout log on every
+        # run so failures are debuggable without re-running the workflow.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-leadership-visual-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/**
+            test-results/**
+            test-artifacts/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop dev server
+        if: always()
+        run: |
+          if [ -f .devserver.pid ]; then kill "$(cat .devserver.pid)" 2>/dev/null || true; fi

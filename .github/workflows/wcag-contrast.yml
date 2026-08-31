@@ -1,0 +1,49 @@
+name: WCAG contrast audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/styles.css"
+      - "scripts/ci/wcag-contrast-audit.mjs"
+      - ".github/workflows/wcag-contrast.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/styles.css"
+      - "scripts/ci/wcag-contrast-audit.mjs"
+      - ".github/workflows/wcag-contrast.yml"
+
+concurrency:
+  group: wcag-contrast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contrast:
+    name: Token-pair AA audit (light + dark + ios)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run WCAG contrast audit
+        id: audit
+        run: node scripts/ci/wcag-contrast-audit.mjs
+
+      - name: Upload contrast report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wcag-contrast-report
+          path: reports/wcag/
+          if-no-files-found: error
+          retention-days: 30

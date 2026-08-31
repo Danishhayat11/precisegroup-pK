@@ -1,0 +1,80 @@
+{
+  "$schema": "./thresholds.schema.json",
+  "_doc": [
+    "Per-test pixel-diff budgets for `toHaveScreenshot`.",
+    "",
+    "Fields (all optional; unset falls back to `default`, then to playwright.config.ts):",
+    "  - maxDiffPixelRatio  0..1  ratio of differing pixels to total. Prefer this over maxDiffPixels — it scales with viewport.",
+    "  - maxDiffPixels      int   absolute cap on differing pixels. Use for tiny element screenshots where a ratio rounds to 0.",
+    "  - threshold          0..1  per-pixel YIQ color-distance tolerance before a pixel is counted as 'different'.",
+    "                             Playwright default is 0.2. Raise to 0.25–0.35 for font-hinting / anti-aliasing noise.",
+    "                             This is the knob for 'ignore minor AA'. Do NOT bump maxDiffPixelRatio to hide AA noise.",
+    "",
+    "Lookup order for a screenshot named `foo-bar-mobile.png` in `tests/visual/foo.spec.ts`:",
+    "  1. tests['tests/visual/foo.spec.ts'].screenshots['foo-bar-mobile.png']",
+    "  2. tests['tests/visual/foo.spec.ts'].default",
+    "  3. default",
+    "",
+    "Screenshot names support the same `*` glob as picomatch (e.g. `mobile-fab-*.png`)."
+  ],
+  "default": {
+    "maxDiffPixelRatio": 0.002,
+    "threshold": 0.2
+  },
+  "tests": {
+    "tests/visual/mobile-primitives.spec.ts": {
+      "default": {
+        "maxDiffPixelRatio": 0.003,
+        "threshold": 0.25,
+        "_why": "Skeleton shimmer + status-badge tone swatches sit on tinted surfaces where AA on rounded corners fluctuates 1–2 subpixels across Playwright patch versions."
+      }
+    },
+    "tests/visual/mobile-primary-tap-targets.spec.ts": {
+      "default": {
+        "maxDiffPixels": 40,
+        "threshold": 0.25,
+        "_why": "Element screenshots are ~44×44 → ratio rounds to 0. Absolute pixel cap catches real changes (icon size, padding drift) while ignoring AA on the FAB's white plus icon and NavLink icon strokes."
+      },
+      "screenshots": {
+        "mobile-bottom-nav-*.png": {
+          "maxDiffPixelRatio": 0.005,
+          "threshold": 0.25,
+          "_why": "Full-width nav bar — 5 icons × subpixel AA on active-tab stroke weight."
+        }
+      }
+    },
+    "tests/visual/tablet-erp-primitives.spec.ts": {
+      "default": {
+        "maxDiffPixelRatio": 0.004,
+        "threshold": 0.25,
+        "_why": "Full-viewport iPad snapshots — sidebar row hover, table zebra, and chart axis labels all AA-render subpixel jitter across Playwright patch versions. Tighter budgets go on per-surface overrides below."
+      },
+      "screenshots": {
+        "tablet-erp-dashboard-*.png": {
+          "maxDiffPixelRatio": 0.005,
+          "threshold": 0.25,
+          "_why": "Dashboard KPI cards + charts — the largest AA surface area in the ERP."
+        },
+        "tablet-erp-ledger-*.png": {
+          "maxDiffPixelRatio": 0.003,
+          "threshold": 0.2,
+          "_why": "Ledger is mostly typography on flat surfaces — keep the budget tight so a real column-alignment regression can't hide."
+        }
+      }
+    },
+    "tests/visual/ledger-tap-targets.spec.ts": {
+      "screenshots": {
+        "ledger-booking-picker-*.png": {
+          "maxDiffPixels": 60,
+          "threshold": 0.2,
+          "_why": "Combobox chevron + border stroke are the only signal — keep threshold tight."
+        },
+        "ledger-whatsapp-button-*.png": {
+          "maxDiffPixels": 30,
+          "threshold": 0.3,
+          "_why": "Green WhatsApp glyph on white — AA around the phone earpiece curve is the dominant noise source."
+        }
+      }
+    }
+  }
+}

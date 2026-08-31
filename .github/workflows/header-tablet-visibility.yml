@@ -1,0 +1,157 @@
+name: Header tablet visibility & snapshots
+
+# Runs `tests/a11y/header-tablet-768-visibility.spec.ts` on every pull request
+# targeting main and on pushes to main. The suite guards the topbar cluster
+# at 768×1024 and 1024×768:
+#
+#   - no horizontal overflow inside the `md:overflow-hidden` app shell
+#   - notifications bell and user-menu trigger visible & inside the viewport
+#   - both controls receive :focus-visible with an unclipped halo
+#   - pixel snapshots (idle + focused) for the bell and user menu — a byte
+#     diff fails the build on any visual regression that the geometry
+#     assertions above would miss (icon translation, halo drop, color
+#     drift, sub-pixel clipping, etc.)
+#
+# Baselines live next to the spec under
+# `tests/a11y/header-tablet-768-visibility.spec.ts-snapshots/` and are
+# committed to the repo. Regenerate locally with `--update-snapshots`.
+#
+# When a snapshot diff intentionally reflects a new design, the Playwright
+# HTML report (uploaded as an artifact below) shows the expected vs actual
+# vs diff PNGs so reviewers can validate the change before updating the
+# baseline.
+#
+# Session-scoped tests self-skip via `HAS_SESSION` when the LOVABLE_BROWSER_*
+# env vars aren't configured, so this check stays green on forks / PRs from
+# unauthorised contributors (but does not run there — the whole file needs
+# an authenticated dashboard to render the header cluster).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: header-tablet-visibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Playwright — header-tablet-768-visibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      FORCE_COLOR: "1"
+      BASE_URL: http://localhost:8080
+      # Public Supabase build vars — required for the dev server to boot.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      # Session env — the spec's `HAS_SESSION` gate needs STORAGE_KEY +
+      # SESSION_JSON to run. Without them every `test.describe` self-skips.
+      LOVABLE_BROWSER_AUTH_STATUS: ${{ secrets.LOVABLE_BROWSER_AUTH_STATUS }}
+      LOVABLE_BROWSER_SUPABASE_STORAGE_KEY: ${{ secrets.LOVABLE_BROWSER_SUPABASE_STORAGE_KEY }}
+      LOVABLE_BROWSER_SUPABASE_SESSION_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_SESSION_JSON }}
+      LOVABLE_BROWSER_SUPABASE_COOKIES_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_COOKIES_JSON }}
+      LOVABLE_BROWSER_SUPABASE_ACCESS_TOKEN: ${{ secrets.LOVABLE_BROWSER_SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions before re-running this workflow."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      # NOTE: no `--update-snapshots`. Any pixel diff vs the committed
+      # baselines under
+      # tests/a11y/header-tablet-768-visibility.spec.ts-snapshots/
+      # fails the job — that is the whole point of this workflow.
+      - name: Run header tablet visibility + snapshot audit
+        run: |
+          bunx playwright test tests/a11y/header-tablet-768-visibility.spec.ts \
+            --project=chromium-reduced-motion \
+            --reporter=list,html \
+            --output=test-results
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: header-tablet-visibility-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # On failure, upload the full test-results directory. For snapshot
+      # failures Playwright writes expected/actual/diff PNGs there so a
+      # reviewer can see exactly which pixels moved before deciding to
+      # regenerate baselines with `--update-snapshots`.
+      - name: Upload Playwright traces, screenshots & snapshot diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: header-tablet-visibility-traces
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore

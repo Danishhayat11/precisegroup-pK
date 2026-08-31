@@ -1,0 +1,283 @@
+name: Header tablet visibility & snapshots (cross-browser)
+
+# Runs `tests/a11y/header-tablet-768-visibility.spec.ts` on every pull
+# request targeting main and on pushes to main. Executes across a
+# Chromium / Firefox / WebKit matrix so cross-engine regressions
+# (Gecko-only Radix portal focus bugs, WebKit CSS painting quirks,
+# Chromium-only compositing changes) are caught before merge.
+#
+# Snapshot baselines are per-browser (Playwright appends the project
+# name + platform to each baseline filename, e.g.
+# `bell-768x1024-idle-chromium-reduced-motion-linux.png`). If a browser
+# has no committed baseline yet, that browser's snapshot test fails and
+# the "actual" PNGs are uploaded to the `snapshot-actuals-<browser>`
+# artifact so a maintainer can download and commit them in one PR.
+# Geometry + focus + a11y assertions run identically across all three
+# browsers regardless of baseline state, so cross-engine regressions
+# are caught even when a browser is missing snapshot baselines.
+#
+# See the sibling workflow `header-tablet-visibility.yml` for the
+# original chromium-only variant. Once every browser has committed
+# baselines, that workflow can be retired in favor of this matrix.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: header-tablet-visibility-matrix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  audit:
+    name: Playwright — ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      # Run every browser to completion even if one fails — a WebKit-only
+      # regression should not hide a Firefox regression in the same PR.
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chromium
+            project: chromium-reduced-motion
+            # Chromium has committed baselines and is the merge-blocking
+            # engine. Snapshot diffs here fail the build hard.
+            required: true
+          - browser: firefox
+            project: firefox-reduced-motion
+            # Baselines seeded lazily — see workflow header. Snapshot
+            # failures on this browser upload actuals as artifacts
+            # rather than blocking merge until baselines land.
+            required: true
+          - browser: webkit
+            project: webkit-reduced-motion
+            required: true
+    env:
+      CI: "true"
+      FORCE_COLOR: "1"
+      BASE_URL: http://localhost:8080
+      # Public Supabase build vars — required for the dev server to boot.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      # Session env — the spec's `HAS_SESSION` gate needs STORAGE_KEY +
+      # SESSION_JSON to run. Without them every `test.describe` self-skips.
+      LOVABLE_BROWSER_AUTH_STATUS: ${{ secrets.LOVABLE_BROWSER_AUTH_STATUS }}
+      LOVABLE_BROWSER_SUPABASE_STORAGE_KEY: ${{ secrets.LOVABLE_BROWSER_SUPABASE_STORAGE_KEY }}
+      LOVABLE_BROWSER_SUPABASE_SESSION_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_SESSION_JSON }}
+      LOVABLE_BROWSER_SUPABASE_COOKIES_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_COOKIES_JSON }}
+      LOVABLE_BROWSER_SUPABASE_ACCESS_TOKEN: ${{ secrets.LOVABLE_BROWSER_SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions before re-running this workflow."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      # Cache each browser separately — different browsers install
+      # different binaries and we don't want a chromium-only refresh
+      # to invalidate firefox/webkit caches.
+      - name: Cache Playwright ${{ matrix.browser }}
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
+      - name: Install Playwright ${{ matrix.browser }} (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps ${{ matrix.browser }}
+
+      # No `--update-snapshots`. Any pixel diff vs the committed
+      # per-browser baselines fails the job. When a browser has no
+      # baseline yet, Playwright treats that as a failure and writes
+      # the "actual" PNG under test-results/ — the artifact upload
+      # step below preserves it so a maintainer can commit the seed.
+      - name: Run header tablet visibility + snapshot audit (${{ matrix.browser }})
+        run: |
+          bunx playwright test tests/a11y/header-tablet-768-visibility.spec.ts \
+            --project=${{ matrix.project }} \
+            --reporter=list,html \
+            --output=test-results
+
+      - name: Upload Playwright HTML report (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: header-tablet-visibility-report-${{ matrix.browser }}
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # On failure, upload the full test-results directory. For snapshot
+      # failures Playwright writes expected/actual/diff PNGs there; for
+      # missing-baseline failures on Firefox / WebKit the "actual" file
+      # is the seed baseline a maintainer needs to commit.
+      - name: Upload Playwright traces, screenshots & snapshot diffs (${{ matrix.browser }})
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: header-tablet-visibility-traces-${{ matrix.browser }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Additionally, always upload any *-actual.png files so that even
+      # a successful run's newly-written baselines can be inspected and
+      # promoted without waiting for a red build first.
+      - name: Upload snapshot actuals (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-actuals-${{ matrix.browser }}
+          path: |
+            test-results/**/*-actual.png
+            test-results/**/*-diff.png
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Post (or update) a single sticky PR comment summarizing the matrix run:
+  #   - Per-browser pass/fail badge
+  #   - Direct link to the Playwright HTML report artifact for each browser
+  #   - Direct link to the traces / snapshot-diff artifact (on failure)
+  #   - Direct link to the snapshot-actuals artifact (always)
+  #
+  # Uses the GitHub REST API to resolve each artifact's numeric ID so the
+  # comment links jump straight to the artifact download page rather than
+  # forcing a reviewer to hunt through the run's artifacts tab. The comment
+  # is identified by an HTML marker and rewritten in place on subsequent
+  # pushes to the same PR (no comment spam).
+  # ---------------------------------------------------------------------------
+  pr-comment:
+    name: Post PR comment with report + artifact links
+    needs: audit
+    if: github.event_name == 'pull_request' && always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Post sticky PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runId = context.runId;
+            const prNumber = context.payload.pull_request.number;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
+
+            // Resolve artifacts for this run so we can deep-link each one.
+            const { data: { artifacts } } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner, repo, run_id: runId, per_page: 100,
+            });
+            const byName = Object.fromEntries(artifacts.map(a => [a.name, a]));
+            const artifactLink = (name, label) => {
+              const a = byName[name];
+              if (!a) return `_${label}: not produced_`;
+              const url = `${context.serverUrl}/${owner}/${repo}/actions/runs/${runId}/artifacts/${a.id}`;
+              const size = (a.size_in_bytes / 1024 / 1024).toFixed(2);
+              return `[${label}](${url}) (${size} MB)`;
+            };
+
+            // Map matrix job conclusions per browser via the Checks API.
+            const { data: jobsPage } = await github.rest.actions.listJobsForWorkflowRun({
+              owner, repo, run_id: runId, per_page: 100,
+            });
+            const jobFor = (browser) =>
+              jobsPage.jobs.find(j => j.name === `Playwright — ${browser}`);
+            const badge = (job) => {
+              if (!job) return '⏳ pending';
+              if (job.conclusion === 'success') return '✅ pass';
+              if (job.conclusion === 'failure') return '❌ fail';
+              if (job.conclusion === 'cancelled') return '⚪ cancelled';
+              return `⚠️ ${job.conclusion ?? job.status}`;
+            };
+
+            const browsers = ['chromium', 'firefox', 'webkit'];
+            const rows = browsers.map((b) => {
+              const job = jobFor(b);
+              return `| **${b}** | ${badge(job)} | ${artifactLink(`header-tablet-visibility-report-${b}`, 'HTML report')} | ${artifactLink(`header-tablet-visibility-traces-${b}`, 'traces + diffs')} | ${artifactLink(`snapshot-actuals-${b}`, 'actuals + diffs')} |`;
+            }).join('\n');
+
+            const marker = '<!-- header-visual-diff-comment -->';
+            const body = [
+              marker,
+              '### 🎯 Header visual diff — matrix results',
+              '',
+              `Run: [#${context.runNumber}](${runUrl}) · commit \`${context.sha.slice(0, 7)}\``,
+              '',
+              '| Browser | Status | Report | Failure artifacts | Snapshot actuals |',
+              '| --- | --- | --- | --- | --- |',
+              rows,
+              '',
+              '<sub>Snapshot baselines are per-browser. On a red run, download **actuals + diffs** to review pixel deltas or seed a missing baseline.</sub>',
+            ].join('\n');
+
+            // Find existing sticky comment by marker, then update or create.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body,
+              });
+            }

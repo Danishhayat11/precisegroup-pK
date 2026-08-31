@@ -1,0 +1,58 @@
+name: Preview theme-color meta guard
+
+# Fails CI if the deployed preview's served HTML for / or /site still carries
+# the old palette theme-color value (#FAFAF7). Runs against the public preview,
+# not the local build, so it catches "code shipped but preview didn't redeploy"
+# regressions in addition to source drift.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/lib/theme.tsx"
+      - "src/routes/__root.tsx"
+      - "src/routes/site**"
+      - "scripts/ci/preview-theme-meta.mjs"
+      - ".github/workflows/preview-theme-meta.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/lib/theme.tsx"
+      - "src/routes/__root.tsx"
+      - "src/routes/site**"
+      - "scripts/ci/preview-theme-meta.mjs"
+      - ".github/workflows/preview-theme-meta.yml"
+  # Nightly canary — catches a stale preview even when no PR touches theme code.
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: "Override preview base URL (default: project preview)"
+        required: false
+
+concurrency:
+  group: preview-theme-meta-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Fetch preview HTML and reject stale theme-color
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check preview theme-color
+        env:
+          PREVIEW_URL: ${{ github.event.inputs.preview_url || 'https://precisegroup-pk.lovable.app' }}
+        run: node scripts/ci/preview-theme-meta.mjs

@@ -1,0 +1,19 @@
+name: RPC allowlist guard
+
+concurrency:
+  group: rpc-allowlist-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Enforce approved RPC allowlist
+        run: node scripts/check-rpc-allowlist.mjs

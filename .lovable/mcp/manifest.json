@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://omxephqkcxynzxekywhn.supabase.co/auth/v1",
+    "accepted_audiences": ["authenticated"]
+  },
+  "mcp": {
+    "server": {
+      "name": "precise-erp-mcp",
+      "version": "0.1.0",
+      "title": "Precise ERP MCP"
+    },
+    "tools": [
+      {
+        "name": "list_bookings",
+        "title": "List bookings",
+        "description": "List real-estate bookings visible to the signed-in user. Supports optional status, risk-level, and project filters, and returns a compact summary suitable for further analysis.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Filter by booking status.",
+              "type": "string",
+              "enum": ["Active", "Cancelled", "Closed"]
+            },
+            "risk_level": {
+              "description": "Filter by computed risk level.",
+              "type": "string",
+              "enum": ["LOW", "MEDIUM", "HIGH"]
+            },
+            "project_code": {
+              "description": "Filter by project code (e.g. 'MA').",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Max rows to return. Defaults to 50, hard cap 200.",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 200
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_booking",
+        "title": "Get booking",
+        "description": "Fetch full details for a single booking (by booking_id such as 'BK-MA-00002'), including financials, dealer commission, and overdue summary.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "booking_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Booking identifier, e.g. 'BK-MA-00002'."
+            }
+          },
+          "required": ["booking_id"]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "search_clients",
+        "title": "Search clients",
+        "description": "Search the clients directory by name, CNIC, or mobile number. Case-insensitive substring match. Returns up to 25 rows.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 2,
+              "description": "Substring to search across client_name, cnic, and mobile."
+            }
+          },
+          "required": ["query"]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "overdue_summary",
+        "title": "Overdue summary",
+        "description": "Return the top overdue bookings (highest total_overdue_amount first) with next_action guidance. Useful for daily collections triage.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "limit": {
+              "description": "Rows to return. Default 10, max 50.",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

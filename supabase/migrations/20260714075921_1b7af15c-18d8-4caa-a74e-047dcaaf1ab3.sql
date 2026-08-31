@@ -1,0 +1,2 @@
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS display_name text;
+COMMENT ON COLUMN public.projects.display_name IS 'Optional editable brand name shown on every generated document. Falls back to project_name when null or blank.';

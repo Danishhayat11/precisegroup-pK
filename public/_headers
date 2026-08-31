@@ -1,0 +1,36 @@
+# Cloudflare Pages-style headers for the deployed site.
+# Vite fingerprints every file under /assets/ with a content hash, so those
+# files are safe to cache immutably for a year. Fonts imported via
+# @fontsource are also fingerprinted into /assets/.
+#
+# The HTML shell must NEVER be cached long — it's how new asset URLs reach
+# the browser after a deploy. `no-cache` (not `no-store`) lets the browser
+# revalidate with the origin instead of re-downloading on every navigation.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/__l5e/assets-v1/*
+  Cache-Control: public, max-age=31536000, immutable
+
+*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+
+*.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+*.avif
+  Cache-Control: public, max-age=31536000, immutable
+
+/favicon.ico
+  Cache-Control: public, max-age=604800
+
+/*.webmanifest
+  Cache-Control: public, max-age=86400
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*
+  Cache-Control: public, max-age=0, must-revalidate

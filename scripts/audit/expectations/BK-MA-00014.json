@@ -1,0 +1,14 @@
+{
+  "booking_id": "BK-MA-00014",
+  "label": "Adil Khan, Manal Arcade",
+  "expected": {
+    "cash_received": 12210000,
+    "remaining_balance": 4950000,
+    "total_contract_value": 17160000,
+    "current_overdue_count": 0,
+    "total_overdue_amount": 0,
+    "installments_paid": 7103000,
+    "possession_paid": 1675000,
+    "down_payment_paid": 3432000
+  }
+}

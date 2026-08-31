@@ -1,0 +1,1071 @@
+/**
+ * Unified print flow for every printable document.
+ *
+ * Why it exists: the on-screen `.doc-sheet` preview must match the file the
+ * user saves from the browser's print dialog. Each call site previously
+ * rolled its own `@page` rule + visibility hack + timeout, which drifted
+ * (different margins, different sheet-visibility selector, different
+ * "Preparing…" toast, no font-ready wait). This helper is the single
+ * source of truth.
+ *
+ * Behaviour:
+ *  1. Show a `Preparing for print…` toast (consistent label).
+ *  2. Inject a scoped `<style id="pp-print-runtime">` with:
+ *      - `@page { size: <w>mm <h>mm; margin: 0 }`
+ *      - hide everything except `.doc-sheet` and its descendants
+ *      - release ancestor `overflow:hidden` / `height:100vh` clamps so
+ *        multi-page documents don't get clipped to the viewport
+ *      - exact colour reproduction (gold rules, navy bands)
+ *  3. Optionally swap `document.title` so the saved PDF filename is sane.
+ *  4. Await `document.fonts.ready` + 2 rAFs so Times New Roman / Calibri
+ *     metrics are settled before the rasteriser snapshots the page.
+ *  5. Call `window.print()` and clean up on `afterprint` (with a 12s
+ *     safety timeout in case the user dismisses without firing it).
+ */
+
+import { toast } from "sonner";
+import { ensureReceiptFitsOrFallback } from "@/lib/receiptPrintSafeFallback";
+
+const STYLE_ID = "pp-print-runtime";
+const HOST_ID = "pp-print-host";
+// Keep the cloned print host alive while Chrome's native print preview is
+// open. Chromium can continue rasterising pages after `window.print()` returns
+// (and some builds fire `afterprint` earlier than expected); removing the host
+// after only a few seconds is what makes the browser-side preview turn blank.
+const SAFETY_MS = 5 * 60_000;
+
+/* --------------------------------------------------------------------
+ * Print debug logger
+ * --------------------------------------------------------------------
+ * Enable in the browser console with:
+ *   localStorage.setItem("pp:printDebug", "1")
+ * or append `?printDebug=1` to the URL. When enabled, every phase of the
+ * print flow (class changes, clone timing, font/image readiness, print
+ * dispatch, afterprint, cleanup) is logged to the console AND retained
+ * in an in-memory ring buffer on `window.__ppPrintDebug` — useful for
+ * diagnosing "A4 prints blank" reports on devices without devtools:
+ *   copy(JSON.stringify(window.__ppPrintDebug.entries(), null, 2))
+ */
+type PrintDebugEntry = {
+  t: number; // ms since flow start
+  ts: string; // ISO wall-clock timestamp
+  phase: string;
+  data?: Record<string, unknown>;
+};
+type PrintDebugSink = {
+  enabled: boolean;
+  entries: () => PrintDebugEntry[];
+  clear: () => void;
+  dump: () => PrintDebugEntry[];
+};
+const DEBUG_BUFFER: PrintDebugEntry[] = [];
+const DEBUG_BUFFER_MAX = 500;
+
+function isPrintDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.localStorage?.getItem("pp:printDebug") === "1") return true;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("printDebug") === "1") return true;
+  } catch {
+    /* storage disabled — ignore */
+  }
+  return false;
+}
+
+function installDebugSink(): void {
+  if (typeof window === "undefined") return;
+  const w = window as unknown as { __ppPrintDebug?: PrintDebugSink };
+  if (w.__ppPrintDebug) return;
+  w.__ppPrintDebug = {
+    get enabled() {
+      return isPrintDebugEnabled();
+    },
+    entries: () => DEBUG_BUFFER.slice(),
+    clear: () => {
+      DEBUG_BUFFER.length = 0;
+    },
+    dump: () => {
+      console.table(DEBUG_BUFFER.map((e) => ({ t: e.t, phase: e.phase, ...e.data })));
+      return DEBUG_BUFFER.slice();
+    },
+  };
+}
+
+function makeDebugLogger(flowId: string) {
+  installDebugSink();
+  const start =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  const enabled = isPrintDebugEnabled();
+  const log = (phase: string, data?: Record<string, unknown>) => {
+    const now =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+    const entry: PrintDebugEntry = {
+      t: Math.round(now - start),
+      ts: new Date().toISOString(),
+      phase: `${flowId}:${phase}`,
+      data,
+    };
+    DEBUG_BUFFER.push(entry);
+    if (DEBUG_BUFFER.length > DEBUG_BUFFER_MAX) DEBUG_BUFFER.shift();
+    if (enabled) {
+      console.info(
+        `[print:${flowId}] +${entry.t}ms  ${phase}`,
+        data && Object.keys(data).length ? data : "",
+      );
+    }
+  };
+  return { log, enabled, start };
+}
+
+function snapshotSheet(el: HTMLElement | null | undefined) {
+  if (!el) return { present: false };
+  const rect = el.getBoundingClientRect();
+  const imgs = el.querySelectorAll("img");
+  let imgTotal = 0;
+  let imgComplete = 0;
+  let imgBroken = 0;
+  imgs.forEach((img) => {
+    imgTotal++;
+    if (img.complete) imgComplete++;
+    if (img.complete && img.naturalWidth === 0) imgBroken++;
+  });
+  return {
+    present: true,
+    className: el.className || null,
+    widthPx: Math.round(rect.width),
+    heightPx: Math.round(rect.height),
+    innerLen: el.innerHTML.length,
+    imgTotal,
+    imgComplete,
+    imgBroken,
+  };
+}
+
+function snapshotFonts() {
+  if (typeof document === "undefined") return { available: false };
+  const fonts = (
+    document as Document & {
+      fonts?: { status?: string; size?: number; ready?: Promise<unknown> };
+    }
+  ).fonts;
+  if (!fonts) return { available: false };
+  return {
+    available: true,
+    status: fonts.status ?? null,
+    size: fonts.size ?? null,
+  };
+}
+
+export type PreparePrintOptions = {
+  /** Page width in mm. Defaults to A4 portrait (210). */
+  pageW?: number;
+  /** Page height in mm. Defaults to A4 portrait (297). */
+  pageH?: number;
+  /** Optional override for `document.title` while the dialog is open
+   *  (browsers seed the PDF filename from this). */
+  title?: string;
+  /** Extra `@media print` rules appended after the standard block
+   *  (e.g. a `transform: scale()` for fit-to-page). */
+  extraPrintCss?: string;
+  /** Toast label. Defaults to "Preparing for print…". */
+  message?: string;
+  /** When true, print exactly ONE physical page — render the first
+   *  `.doc-sheet` into an isolated same-origin iframe sized to the page
+   *  and print from there. This is the only reliable way to guarantee a
+   *  single sheet on iOS Safari / Android Chrome, which otherwise
+   *  paginate overflowing content even with `overflow: hidden`. */
+  singlePage?: boolean;
+};
+
+/**
+ * Build the standardized `@media print` block. Exported so tests can
+ * assert that every call site uses the exact same rules.
+ */
+export function buildPrintPageCss(pageW = 210, pageH = 297, extra = ""): string {
+  return `
+    /* ------------------------------------------------------------------
+     * Paged-media page box
+     * ------------------------------------------------------------------
+     * Chromium (Chrome/Edge) and WebKit both honor \`@page { size }\` plus
+     * per-side margins. We set the same explicit size on every named page
+     * pseudo (:first / :left / :right / :blank) so the browser cannot fall
+     * back to the user's default paper (Letter) and clip the right edge on
+     * A4 content. \`marks\` and \`bleed\` are declared explicitly for
+     * Chromium's paged-media pipeline to disable any implicit safety area
+     * that would otherwise shrink the printable box.
+     * ------------------------------------------------------------------ */
+    @page { size: ${pageW}mm ${pageH}mm; margin: 0; marks: none; bleed: 0; }
+    @page :first { size: ${pageW}mm ${pageH}mm; margin: 0; }
+    @page :left  { size: ${pageW}mm ${pageH}mm; margin: 0; }
+    @page :right { size: ${pageW}mm ${pageH}mm; margin: 0; }
+    @page :blank { size: ${pageW}mm ${pageH}mm; margin: 0; }
+
+    @media print {
+      /* Universal border-box: every mm of padding/border counts INSIDE
+         the sheet width, so a stray \`padding-right\` can never push
+         content past the page's right edge. Chromium historically leaks
+         content-box math from unstyled tables/forms — pin it globally. */
+      *, *::before, *::after {
+        box-sizing: border-box !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        width: ${pageW}mm !important;
+        max-width: ${pageW}mm !important;
+        min-width: 0 !important;
+        /* Chromium respects overflow:clip on the root when paginating;
+           WebKit ignores it, so we keep overflow:visible below for page
+           flow but clip on the x axis to eliminate 0.5–1px sub-pixel
+           bleed that Chrome/Edge would otherwise render as a phantom
+           right-edge cutoff. */
+        overflow-x: clip !important;
+      }
+
+      /* Hide everything by default … */
+      body:has(#${HOST_ID}) *,
+      body:has(.doc-sheet) *,
+      body:has(.pp-print-root) * { visibility: hidden !important; }
+      /* … then reveal only the printable document sheet(s). */
+      #${HOST_ID}, #${HOST_ID} *,
+      .doc-sheet, .doc-sheet *,
+      .pp-print-root, .pp-print-root * { visibility: visible !important; }
+
+      /* Print from an isolated clone, not from the app/dialog layout. This
+         prevents hidden page content, modals, measurement portals, or long
+         tables behind the receipt from contributing extra blank/repeated pages
+         in Android/Chrome print preview. */
+      body.pp-print-isolated > :not(#${HOST_ID}):not(#${STYLE_ID}) { display: none !important; }
+
+      /* Release ancestor scroll/height clamps (AppShell uses h-screen +
+         overflow-hidden, which would otherwise truncate page 2+). */
+      body * { overflow: visible !important; }
+      html, body, #root, main {
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+      }
+      html, body { overflow-x: clip !important; }
+
+      body.pp-print-isolated #${HOST_ID} {
+        display: block !important;
+        position: absolute !important;
+        left: 0 !important; top: 0 !important;
+        width: ${pageW}mm !important;
+        max-width: ${pageW}mm !important;
+        margin: 0 !important; padding: 0 !important;
+        background: #fff !important;
+      }
+
+      .pp-print-root {
+        position: absolute !important;
+        left: 0 !important; top: 0 !important;
+        width: ${pageW}mm !important;
+        max-width: ${pageW}mm !important;
+        margin: 0 !important; padding: 0 !important;
+        background: #fff !important;
+      }
+      .pp-zoom-wrap { transform: none !important; width: auto !important; max-width: ${pageW}mm !important; }
+
+      .doc-sheet {
+        position: relative !important;
+        /* The preview renders each sheet as \`display: flex; flex-direction: column\`
+           with a fixed \`height: 297mm\` so header + flex body + footer split the
+           page. In print we let content paginate naturally, so we MUST drop the
+           flex box — otherwise the body child (flex: 1, min-height: 0,
+           overflow: hidden) collapses to zero height in an auto-height parent
+           and Chrome/WebKit rasterise a blank page. Force block flow. */
+        display: block !important;
+        width: ${pageW}mm !important;
+        max-width: ${pageW}mm !important;
+        min-height: ${pageH}mm !important;
+        height: auto !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        border: none !important;
+        background: #fff !important;
+        overflow: visible !important;
+        /* Let the browser paginate a single doc-sheet naturally. Only force
+           a page break BETWEEN adjacent sheets (multi-document print), never
+           after a single sheet — otherwise a lone document emits a trailing
+           blank page, and a paginated preview would multiply into N pages. */
+        page-break-after: auto;
+        break-after: auto;
+        page-break-inside: auto;
+        break-inside: auto;
+      }
+      /* Neutralise the flex-child sizing that only makes sense in the
+         fixed-height on-screen preview. In print, the body/wrap must be a
+         plain block that contributes its natural height and never clips —
+         otherwise \`flex: 1; min-height: 0; overflow: hidden\` collapses to
+         a zero-height box (blank preview) or clips content mid-page. */
+      .doc-sheet .doc-body,
+      .doc-sheet .doc-body-wrap,
+      .doc-sheet > .doc-body,
+      .doc-sheet > .doc-body-wrap {
+        display: block !important;
+        flex: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      .doc-sheet + .doc-sheet {
+        page-break-before: always;
+        break-before: page;
+      }
+
+      /* Right-edge safety: any descendant of the sheet is bounded by the
+         page width. This is the belt-and-braces fix for Chromium/Edge
+         where a long unbroken token (URL, reference no., email) or an
+         intrinsically wider table/img would otherwise force horizontal
+         overflow and clip on the printed page's right edge. */
+      .doc-sheet * {
+        max-width: 100% !important;
+      }
+      .doc-sheet img,
+      .doc-sheet svg,
+      .doc-sheet video,
+      .doc-sheet canvas {
+        max-width: 100% !important;
+        height: auto;
+      }
+      .doc-sheet table {
+        max-width: 100% !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+      }
+      .doc-sheet th,
+      .doc-sheet td {
+        word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        /* Never let a cell's content split across pages — Chromium/WebKit
+           both honor break-inside on td/th when the row also opts out. */
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      /* Row-level pagination: keep every table row intact, repeat headers
+         on continuation pages, keep totals with the last data row. */
+      .doc-sheet tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        -webkit-column-break-inside: avoid !important;
+      }
+      .doc-sheet tbody { break-inside: auto; }
+      .doc-sheet thead {
+        display: table-header-group;
+        break-after: avoid;
+        page-break-after: avoid;
+      }
+      .doc-sheet tfoot {
+        display: table-footer-group;
+        break-before: avoid;
+        page-break-before: avoid;
+      }
+      /* Group-header rows (month/section subheaders) must stick with the
+         first data row that follows them. */
+      .doc-sheet tr.row-group-header,
+      .doc-sheet tr[data-row-group-header] {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+      .doc-sheet p,
+      .doc-sheet li,
+      .doc-sheet dd,
+      .doc-sheet dt,
+      .doc-sheet span,
+      .doc-sheet a {
+        overflow-wrap: anywhere !important;
+        word-break: normal;
+        /* Prevent single-line orphans/widows at page breaks. */
+        orphans: 3;
+        widows: 3;
+      }
+      /* Keep atomic blocks (summary cards, banners, header/footer, key/value
+         grids) from splitting across page boundaries. */
+      .doc-sheet .doc-header,
+      .doc-sheet .doc-footer,
+      .doc-sheet .keep-together,
+      .doc-sheet [data-keep-together],
+      .doc-sheet figure,
+      .doc-sheet blockquote {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      /* Headings should never be the last line on a page. */
+      .doc-sheet h1,
+      .doc-sheet h2,
+      .doc-sheet h3,
+      .doc-sheet h4 {
+        break-after: avoid;
+        page-break-after: avoid;
+      }
+
+      /* WebKit-specific: some Safari builds paint a 1px translucent border
+         on the paginated root when \`overflow: visible\` — force it off. */
+      @supports (-webkit-hyphens: none) {
+        .doc-sheet { -webkit-print-color-adjust: exact !important; }
+        html, body { -webkit-text-size-adjust: 100% !important; }
+      }
+
+      /* Hide app chrome and any element opted out of print. */
+      aside, nav, header.app-header, .app-shell-sidebar, .app-shell-header,
+      [data-print-hide], .print\\:hidden, [role="toolbar"],
+      [data-sonner-toaster], .toaster, .Toaster { display: none !important; }
+
+      a, a:visited { color: inherit; text-decoration: none; }
+      a[href]::after { content: "" !important; }
+
+      ${extra}
+    }
+  `;
+}
+
+/**
+ * Explicitly warm every font family × weight × style combination that
+ * appears in the print root. `document.fonts.ready` only awaits fonts the
+ * browser has *already decided* to load — a receipt that just cloned into
+ * an off-screen host may not have triggered a font-face request yet, so
+ * `ready` resolves immediately and Chrome then rasterises the print job
+ * before the swap arrives. Calling `document.fonts.load(<shorthand>)`
+ * per (family, weight, style) forces the load and returns a promise that
+ * resolves only when those specific faces are ready.
+ */
+async function warmFontsFor(
+  root: ParentNode,
+  log?: (phase: string, data?: Record<string, unknown>) => void,
+): Promise<void> {
+  const l = log ?? (() => {});
+  const fonts = (
+    document as Document & {
+      fonts?: FontFaceSet & { load?: (font: string, text?: string) => Promise<FontFace[]> };
+    }
+  ).fonts;
+  if (!fonts?.load) {
+    l("warmFonts:unavailable");
+    return;
+  }
+  const els = (
+    root as ParentNode & { querySelectorAll?: (s: string) => NodeListOf<Element> }
+  ).querySelectorAll?.("*");
+  if (!els) return;
+  const combos = new Set<string>();
+  els.forEach((node) => {
+    const cs = window.getComputedStyle(node as Element);
+    const family = cs.fontFamily?.trim();
+    const weight = cs.fontWeight?.trim() || "400";
+    const style = cs.fontStyle?.trim() || "normal";
+    const size = cs.fontSize?.trim() || "16px";
+    if (family) combos.add(`${style} ${weight} ${size} ${family}`);
+  });
+  l("warmFonts:combos", { count: combos.size });
+  const results = await Promise.allSettled(
+    Array.from(combos).map((shorthand) => fonts.load!(shorthand)),
+  );
+  const failed = results.filter((r) => r.status === "rejected").length;
+  l("warmFonts:settled", { total: combos.size, failed });
+}
+
+/**
+ * Wait for images (including those referenced by CSS `background-image`)
+ * and `<link rel=stylesheet>` sheets to finish loading inside the print
+ * root. Bounded so a broken asset can never wedge the flow.
+ */
+async function waitForImagesAndBackgrounds(
+  root: ParentNode,
+  budgetMs: number,
+  log?: (phase: string, data?: Record<string, unknown>) => void,
+): Promise<void> {
+  const l = log ?? (() => {});
+  const scope = root as ParentNode & { querySelectorAll?: (s: string) => NodeListOf<Element> };
+  const imgs = Array.from(scope.querySelectorAll?.("img") ?? []) as HTMLImageElement[];
+
+  // Collect CSS background-image URLs so we can preload them; the print
+  // rasteriser paints from live layers, so a still-fetching background
+  // otherwise prints as blank.
+  const bgUrls = new Set<string>();
+  const nodes = Array.from(scope.querySelectorAll?.("*") ?? []);
+  for (const node of nodes) {
+    const bg = window.getComputedStyle(node as Element).backgroundImage;
+    if (!bg || bg === "none") continue;
+    const re = /url\((['"]?)(.*?)\1\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(bg))) {
+      if (m[2] && !m[2].startsWith("data:")) bgUrls.add(m[2]);
+    }
+  }
+
+  const imgWaits = imgs.map((img) =>
+    img.complete
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        }),
+  );
+  const bgWaits = Array.from(bgUrls).map(
+    (url) =>
+      new Promise<void>((resolve) => {
+        const probe = new Image();
+        probe.onload = () => resolve();
+        probe.onerror = () => resolve();
+        probe.src = url;
+      }),
+  );
+
+  let timedOut = false;
+  await Promise.race([
+    Promise.all([...imgWaits, ...bgWaits]),
+    new Promise<void>((resolve) =>
+      window.setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, budgetMs),
+    ),
+  ]);
+  l("waitForImagesAndBackgrounds:settled", {
+    imgs: imgs.length,
+    backgrounds: bgUrls.size,
+    timedOut,
+  });
+}
+
+/**
+ * Poll `getBoundingClientRect` until the print root's size stops changing
+ * across two consecutive frames — signals async React/Suspense content and
+ * webfont layout shifts have settled. Bounded so we cannot deadlock.
+ */
+async function waitForLayoutStable(
+  root: ParentNode,
+  opts: { maxMs: number; quietFrames: number },
+  log?: (phase: string, data?: Record<string, unknown>) => void,
+): Promise<void> {
+  const l = log ?? (() => {});
+  const el = (
+    root as ParentNode & { querySelector?: (s: string) => Element | null }
+  ).querySelector?.(".doc-sheet") as HTMLElement | null;
+  if (!el) return;
+  const start = performance.now();
+  let last = { w: -1, h: -1 };
+  let quiet = 0;
+  while (performance.now() - start < opts.maxMs) {
+    const r = el.getBoundingClientRect();
+    const w = Math.round(r.width);
+    const h = Math.round(r.height);
+    if (w === last.w && h === last.h && w > 0 && h > 0) {
+      quiet++;
+      if (quiet >= opts.quietFrames) {
+        l("waitForLayoutStable:settled", {
+          w,
+          h,
+          quietFrames: quiet,
+          ms: Math.round(performance.now() - start),
+        });
+        return;
+      }
+    } else {
+      quiet = 0;
+    }
+    last = { w, h };
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  }
+  l("waitForLayoutStable:timeout", { ms: opts.maxMs });
+}
+
+async function waitForReady(
+  root: ParentNode = document,
+  log?: (phase: string, data?: Record<string, unknown>) => void,
+): Promise<void> {
+  const l = log ?? (() => {});
+  l("waitForReady:start", { fonts: snapshotFonts() });
+
+  // 1. Warm every font-face combination that actually appears in the
+  //    print root — this triggers loads that document.fonts.ready would
+  //    otherwise skip because no glyph has been laid out yet.
+  try {
+    await warmFontsFor(root, log);
+  } catch (err) {
+    l("warmFonts:error", { message: (err as Error)?.message });
+  }
+
+  // 2. Await the global fonts.ready gate for anything the shell triggered
+  //    concurrently (icons, decorative faces).
+  try {
+    const fonts = (document as Document & { fonts?: { ready?: Promise<unknown>; status?: string } })
+      .fonts;
+    if (fonts?.ready) {
+      await fonts.ready;
+      l("waitForReady:fontsReady", snapshotFonts());
+      // Extra guard: `ready` can resolve while `status` still transitions
+      // from "loading" to "loaded" on Safari; poll briefly.
+      const pollStart = performance.now();
+      while (fonts.status && fonts.status !== "loaded" && performance.now() - pollStart < 750) {
+        await new Promise<void>((r) => window.setTimeout(r, 50));
+      }
+      l("waitForReady:fontsStatus", { status: fonts.status ?? null });
+    } else {
+      l("waitForReady:fontsUnavailable");
+    }
+  } catch (err) {
+    l("waitForReady:fontsError", { message: (err as Error)?.message });
+  }
+
+  // 3. Wait for images + CSS background images inside the print root.
+  await waitForImagesAndBackgrounds(root, 3_000, log);
+
+  // 4. Wait for the sheet's box to stop shifting so dynamic content (data
+  //    fetches, Suspense boundaries, late layout) is fully committed.
+  await waitForLayoutStable(root, { maxMs: 1_500, quietFrames: 3 }, log);
+
+  // 5. Two rAFs guarantee the compositor has painted the settled tree
+  //    before the browser snapshots for print.
+  await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  l("waitForReady:done");
+}
+
+function armCleanupAfterPrintDialog(
+  cleanup: () => void,
+  log: (phase: string, data?: Record<string, unknown>) => void,
+  reason: string,
+): void {
+  let finished = false;
+  const removeListeners = () => {
+    window.removeEventListener("focus", onPotentialReturn);
+    document.removeEventListener("visibilitychange", onPotentialReturn);
+    window.removeEventListener("pageshow", onPotentialReturn);
+  };
+  const finish = (phase: string) => {
+    if (finished) return;
+    finished = true;
+    removeListeners();
+    log("cleanupArmed:finish", {
+      reason,
+      phase,
+      hasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : null,
+      visibilityState: document.visibilityState ?? null,
+    });
+    window.setTimeout(cleanup, 750);
+  };
+  function onPotentialReturn() {
+    const hasFocus = typeof document.hasFocus === "function" ? document.hasFocus() : true;
+    const visible = document.visibilityState !== "hidden";
+    log("cleanupArmed:signal", {
+      reason,
+      hasFocus,
+      visibilityState: document.visibilityState ?? null,
+    });
+    if (hasFocus && visible) finish("focus-returned");
+  }
+
+  log("cleanupArmed:start", {
+    reason,
+    safetyMs: SAFETY_MS,
+    hasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : null,
+    visibilityState: document.visibilityState ?? null,
+  });
+  window.addEventListener("focus", onPotentialReturn);
+  document.addEventListener("visibilitychange", onPotentialReturn);
+  window.addEventListener("pageshow", onPotentialReturn);
+  window.setTimeout(() => finish("safety"), SAFETY_MS);
+}
+
+function activatePrintHostForBrowserSnapshot(pageW: number, pageH: number): void {
+  const hostEl = document.getElementById(HOST_ID) as HTMLElement | null;
+  if (!hostEl) return;
+  // Chrome's print preview can snapshot immediately as `window.print()` hands
+  // off to native UI. If the isolated clone is still `visibility:hidden` and
+  // parked at -10000px until @media print applies, that first snapshot may be
+  // blank. Make the clone a normal visible page at the origin before calling
+  // print; the print stylesheet still hides the app chrome and controls.
+  hostEl.style.position = "absolute";
+  hostEl.style.left = "0";
+  hostEl.style.top = "0";
+  hostEl.style.width = `${pageW}mm`;
+  hostEl.style.minHeight = `${pageH}mm`;
+  hostEl.style.margin = "0";
+  hostEl.style.padding = "0";
+  hostEl.style.background = "#fff";
+  hostEl.style.visibility = "visible";
+  hostEl.style.pointerEvents = "none";
+  hostEl.style.zIndex = "2147483647";
+}
+
+/**
+ * Run the standardized "Preparing for print…" flow and open the
+ * browser's print dialog. Resolves after cleanup completes.
+ */
+export async function preparePrint(opts: PreparePrintOptions = {}): Promise<void> {
+  const {
+    pageW = 210,
+    pageH = 297,
+    title,
+    extraPrintCss = "",
+    message = "Preparing for print…",
+    singlePage = false,
+  } = opts;
+
+  const { log } = makeDebugLogger("multi");
+  log("enter", {
+    pageW,
+    pageH,
+    title,
+    singlePage,
+    ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    dpr: typeof window !== "undefined" ? window.devicePixelRatio : null,
+  });
+
+  if (singlePage) {
+    log("delegateToSinglePage");
+    return preparePrintSinglePage({ pageW, pageH, title, extraPrintCss, message });
+  }
+
+  // Remove any stale stylesheet from a previous aborted run.
+  const staleStyle = !!document.getElementById(STYLE_ID);
+  const staleHost = !!document.getElementById(HOST_ID);
+  const staleClass = document.body.classList.contains("pp-print-isolated");
+  document.getElementById(STYLE_ID)?.remove();
+  document.getElementById(HOST_ID)?.remove();
+  document.body.classList.remove("pp-print-isolated");
+  log("cleanStale", { staleStyle, staleHost, staleClass });
+
+  const previewSheets = Array.from(
+    document.querySelectorAll<HTMLElement>(".pp-print-root .doc-sheet"),
+  );
+  const fallbackSheets = previewSheets.length
+    ? []
+    : Array.from(document.querySelectorAll<HTMLElement>(".doc-sheet"));
+  const sourceSheets = previewSheets.length ? previewSheets : fallbackSheets;
+  log("discoverSheets", {
+    previewSheetCount: previewSheets.length,
+    fallbackSheetCount: fallbackSheets.length,
+    first: snapshotSheet(sourceSheets[0]),
+  });
+
+  if (sourceSheets.length > 0) {
+    const cloneStart = performance.now();
+    const hostEl = document.createElement("div");
+    hostEl.id = HOST_ID;
+    hostEl.setAttribute("aria-hidden", "true");
+    hostEl.style.cssText =
+      "position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none;";
+    for (const sheet of sourceSheets) {
+      hostEl.appendChild(sheet.cloneNode(true));
+    }
+    document.body.appendChild(hostEl);
+    document.body.classList.add("pp-print-isolated");
+    activatePrintHostForBrowserSnapshot(pageW, pageH);
+    log("cloneMounted", {
+      sheets: sourceSheets.length,
+      cloneMs: Math.round(performance.now() - cloneStart),
+      hostChildren: hostEl.childElementCount,
+      firstClone: snapshotSheet(hostEl.firstElementChild as HTMLElement | null),
+      bodyClass: document.body.className,
+    });
+  } else {
+    log("noSourceSheets");
+  }
+
+  const styleEl = document.createElement("style");
+  styleEl.id = STYLE_ID;
+  styleEl.textContent = buildPrintPageCss(pageW, pageH, extraPrintCss);
+  document.head.appendChild(styleEl);
+  log("styleInjected", { cssLen: styleEl.textContent.length });
+
+  const prevTitle = document.title;
+  if (title) document.title = title;
+
+  const tId = toast.loading(message);
+
+  let cleaned = false;
+  let cleanupArmed = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.getElementById(STYLE_ID)?.remove();
+    document.getElementById(HOST_ID)?.remove();
+    document.body.classList.remove("pp-print-isolated");
+    document.title = prevTitle;
+    window.removeEventListener("afterprint", cleanup);
+    toast.dismiss(tId);
+    log("cleanup");
+  };
+  const armCleanup = (reason: string) => {
+    if (cleanupArmed || cleaned) return;
+    cleanupArmed = true;
+    armCleanupAfterPrintDialog(cleanup, log, reason);
+  };
+  window.addEventListener("afterprint", () => {
+    log("afterprint");
+    armCleanup("afterprint");
+  });
+
+  try {
+    await waitForReady(document, log);
+    log("beforePrint", {
+      hostSnapshot: snapshotSheet(
+        document.getElementById(HOST_ID)?.firstElementChild as HTMLElement | null,
+      ),
+    });
+    activatePrintHostForBrowserSnapshot(pageW, pageH);
+    log("hostActivated", {
+      hostSnapshot: snapshotSheet(
+        document.getElementById(HOST_ID)?.firstElementChild as HTMLElement | null,
+      ),
+    });
+    window.print();
+    toast.dismiss(tId);
+    log("printCalled");
+    armCleanup("print-called");
+  } catch (err: any) {
+    log("printError", { message: err?.message });
+    cleanup();
+    toast.error("Couldn't open the print dialog", {
+      description: err?.message || "Your browser blocked printing. Try again or use Export PDF.",
+    });
+    throw err;
+  }
+}
+
+/**
+ * Isolated single-page print via a cloned host in the main document. The host
+ * IS one physical page during print — the receipt is rendered at exact A4
+ * size with `overflow: hidden`, so mobile browsers cannot spill it into a
+ * multi-page flow. Everything else in the app (dialogs, measurement portals,
+ * background pages) is display-none while the browser rasterises the page.
+ */
+async function preparePrintSinglePage(opts: {
+  pageW: number;
+  pageH: number;
+  title?: string;
+  extraPrintCss: string;
+  message: string;
+}): Promise<void> {
+  const { pageW, pageH, title, extraPrintCss, message } = opts;
+  const { log } = makeDebugLogger("single");
+  log("enter", {
+    pageW,
+    pageH,
+    title,
+    ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    dpr: typeof window !== "undefined" ? window.devicePixelRatio : null,
+    viewport:
+      typeof window !== "undefined" ? { w: window.innerWidth, h: window.innerHeight } : null,
+  });
+
+  const staleStyle = !!document.getElementById(STYLE_ID);
+  const staleHost = !!document.getElementById(HOST_ID);
+  const staleClass = document.body.classList.contains("pp-print-isolated");
+  document.getElementById(STYLE_ID)?.remove();
+  document.getElementById(HOST_ID)?.remove();
+  document.body.classList.remove("pp-print-isolated");
+  log("cleanStale", { staleStyle, staleHost, staleClass });
+
+  const previewSheets = Array.from(
+    document.querySelectorAll<HTMLElement>(".pp-print-root .doc-sheet"),
+  );
+  const fallbackSheet = previewSheets.length
+    ? null
+    : document.querySelector<HTMLElement>(".doc-sheet");
+  const sourceSheet = previewSheets[0] ?? fallbackSheet;
+  log("discoverSheet", {
+    previewSheetCount: previewSheets.length,
+    usedFallback: !previewSheets[0] && !!fallbackSheet,
+    source: snapshotSheet(sourceSheet),
+  });
+
+  if (!sourceSheet) {
+    log("abortNoSheet");
+    toast.error("Nothing to print");
+    return;
+  }
+
+  const tId = toast.loading(message);
+
+  const prevTitle = document.title;
+  if (title) document.title = title;
+
+  const cloneStart = performance.now();
+  const clone = sourceSheet.cloneNode(true) as HTMLElement;
+  const beforeClass = clone.className;
+  clone.className = (clone.className || "")
+    .split(/\s+/)
+    .filter((c) => c && !c.startsWith("shadow-") && c !== "mb-6")
+    .join(" ");
+  log("cloneClassChanged", { before: beforeClass, after: clone.className });
+
+  clone.style.width = `${pageW}mm`;
+  clone.style.height = `${pageH}mm`;
+  clone.style.maxHeight = `${pageH}mm`;
+  clone.style.margin = "0";
+  clone.style.boxShadow = "none";
+  clone.style.outline = "none";
+  clone.style.border = "none";
+  clone.style.overflow = "hidden";
+  clone.style.pageBreakInside = "avoid";
+  clone.style.breakInside = "avoid";
+
+  const hostEl = document.createElement("div");
+  hostEl.id = HOST_ID;
+  hostEl.setAttribute("aria-hidden", "true");
+  hostEl.style.cssText =
+    "position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none;";
+  hostEl.appendChild(clone);
+  document.body.appendChild(hostEl);
+  document.body.classList.add("pp-print-isolated");
+  activatePrintHostForBrowserSnapshot(pageW, pageH);
+  log("cloneMounted", {
+    cloneMs: Math.round(performance.now() - cloneStart),
+    innerLen: clone.innerHTML.length,
+    childCount: clone.childElementCount,
+    bodyClass: document.body.className,
+  });
+
+  const css = `
+    @page { size: ${pageW}mm ${pageH}mm; margin: 0; }
+    @media print {
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        width: ${pageW}mm !important;
+        height: ${pageH}mm !important;
+        overflow: hidden !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        box-sizing: border-box !important;
+      }
+      body:has(#${HOST_ID}) * { visibility: hidden !important; }
+      #${HOST_ID}, #${HOST_ID} * { visibility: visible !important; }
+      body.pp-print-isolated > :not(#${HOST_ID}):not(#${STYLE_ID}) { display: none !important; }
+      #${HOST_ID} {
+        display: block !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: ${pageW}mm !important;
+        height: ${pageH}mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        overflow: hidden !important;
+      }
+      #${HOST_ID} .doc-sheet {
+        display: block !important;
+        width: ${pageW}mm !important;
+        height: ${pageH}mm !important;
+        min-height: ${pageH}mm !important;
+        max-height: ${pageH}mm !important;
+        overflow: hidden !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-before: avoid !important;
+        break-before: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        border: none !important;
+        background: #fff !important;
+      }
+      #${HOST_ID} .doc-sheet .doc-body,
+      #${HOST_ID} .doc-sheet .doc-body-wrap {
+        display: block !important;
+        flex: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      .pp-layout-guides { display: none !important; }
+      ${extraPrintCss}
+    }
+  `;
+
+  const styleEl = document.createElement("style");
+  styleEl.id = STYLE_ID;
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+  log("styleInjected", { cssLen: css.length });
+
+  await waitForReady(hostEl, log);
+  log("readyForPrint", { hostSnapshot: snapshotSheet(clone) });
+
+  // Print-safe fallback: if the receipt clone still overflows horizontally
+  // or would spill to a second page, swap in the simplified single-copy
+  // layout before we hand off to the browser rasteriser.
+  try {
+    const fit = ensureReceiptFitsOrFallback({ clone, pageW, pageH });
+    if (fit) {
+      log("receiptFitCheck", fit as unknown as Record<string, unknown>);
+      if (fit.needsFallback) {
+        // Give the simplified styles one frame to lay out before printing.
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
+    }
+  } catch (err) {
+    log("receiptFitCheckError", { message: (err as Error)?.message });
+  }
+
+  let cleaned = false;
+  let cleanupArmed = false;
+  const doCleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.getElementById(STYLE_ID)?.remove();
+    document.getElementById(HOST_ID)?.remove();
+    document.getElementById("pp-receipt-fallback-style")?.remove();
+    document.getElementById("pp-receipt-autoscale-style")?.remove();
+    document.body.classList.remove("pp-print-isolated");
+    document.title = prevTitle;
+    window.removeEventListener("afterprint", doCleanup);
+    toast.dismiss(tId);
+    log("cleanup");
+  };
+  const armCleanup = (reason: string) => {
+    if (cleanupArmed || cleaned) return;
+    cleanupArmed = true;
+    armCleanupAfterPrintDialog(doCleanup, log, reason);
+  };
+  window.addEventListener("afterprint", () => {
+    log("afterprint");
+    armCleanup("afterprint");
+  });
+
+  try {
+    window.focus();
+    activatePrintHostForBrowserSnapshot(pageW, pageH);
+    log("hostActivated", { hostSnapshot: snapshotSheet(clone) });
+    window.print();
+    toast.dismiss(tId);
+    log("printCalled");
+    armCleanup("print-called");
+  } catch (err: any) {
+    log("printError", { message: err?.message });
+    doCleanup();
+    toast.error("Couldn't open the print dialog", {
+      description: err?.message || "Your browser blocked printing. Try again.",
+    });
+    throw err;
+  }
+}

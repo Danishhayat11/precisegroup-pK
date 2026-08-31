@@ -1,0 +1,65 @@
+# Enforces the UI QA checklist in `.github/pull_request_template.md`.
+#
+# On every PR event (opened, edited, synchronize, reopened, labeled,
+# unlabeled), this job scans the PR body for any unchecked box (`- [ ]`)
+# inside the "## UI QA checklist" section and fails if any remain.
+#
+# Opt-out: add the `no-ui` label to the PR — the job then passes without
+# scanning. Reviewers can tick every box AND label the PR when the change
+# has no rendered UI surface (workflow-only, docs-only, etc.).
+name: pr-ui-qa-checklist
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: pr-ui-qa-checklist-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Enforce UI QA checklist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || "";
+            const labels = (pr.labels || []).map((l) => l.name);
+
+            if (labels.includes("no-ui")) {
+              core.info("PR has `no-ui` label — skipping UI QA checklist enforcement.");
+              return;
+            }
+
+            // Extract the "## UI QA checklist" section only, so unchecked
+            // boxes elsewhere in the description (e.g. a "future work"
+            // list) do not fail the check.
+            const start = body.search(/^##\s+UI QA checklist\s*$/mi);
+            if (start === -1) {
+              core.setFailed(
+                "PR description is missing the `## UI QA checklist` section. " +
+                "Use the repository PR template (`.github/pull_request_template.md`) " +
+                "or add the `no-ui` label if this change has no UI surface.",
+              );
+              return;
+            }
+            const after = body.slice(start + 1);
+            const nextHeading = after.search(/^##\s+/m);
+            const section =
+              nextHeading === -1 ? body.slice(start) : body.slice(start, start + 1 + nextHeading);
+
+            const unchecked = section.match(/^- \[ \]/gm) || [];
+            if (unchecked.length > 0) {
+              core.setFailed(
+                `UI QA checklist has ${unchecked.length} unchecked item(s). ` +
+                "Verify every box per `docs/ui-qa-checklist.md`, tick them in the PR " +
+                "description, or add the `no-ui` label to opt out.",
+              );
+              return;
+            }
+
+            core.info("All UI QA checklist items are ticked. ✅");

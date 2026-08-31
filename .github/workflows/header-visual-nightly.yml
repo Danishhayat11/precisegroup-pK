@@ -1,0 +1,264 @@
+name: Header visual regression — nightly
+
+# Runs the header visual-regression suite every night against `main`, on a
+# cron schedule and on-demand via workflow_dispatch. The PR/push workflows
+# (`header-tablet-visibility.yml`, `header-tablet-visibility-matrix.yml`)
+# only fire on code changes, so slow-moving drift that never touches the
+# header code — a global token tweak, a font swap, a shadcn upgrade, a
+# Playwright browser refresh in the runner image — could sit undetected
+# between merges. This nightly run is the safety net that catches it.
+#
+# What runs
+# ---------
+# The three snapshot-bearing header specs, matrixed across Chromium /
+# Firefox / WebKit at 768×1024 + 1024×768:
+#   - tests/a11y/header-tablet-768-visibility.spec.ts
+#   - tests/a11y/header-tablet-parity-768-vs-1024.spec.ts
+#   - tests/a11y/header-notifications-popover-focus.spec.ts
+#
+# Snapshot baselines are per-browser (Playwright appends the project
+# name + platform). Chromium baselines are committed; Firefox and
+# WebKit fail lazily and their "actual" PNGs upload as artifacts.
+#
+# What happens on failure
+# -----------------------
+# A single tracking issue titled "Nightly header visual regression: <date>"
+# is opened (or an existing open one is commented) with a link to the
+# failing run. Merged runs close the tracking issue automatically the
+# next time nightly goes green. This gives a single place to triage
+# slow drift instead of scanning past Action runs.
+
+on:
+  schedule:
+    # 07:15 UTC daily = 00:15 PT / 03:15 ET. Off-peak for the runner
+    # pool and after any nightly deploy has settled. The 15-minute
+    # offset dodges the top-of-hour scheduler burst on GitHub-hosted
+    # runners (cron jobs at :00 are heavily queued).
+    - cron: "15 7 * * *"
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: "Re-baseline snapshots on this run instead of asserting against them. Use only when a design change is intentional."
+        type: boolean
+        default: false
+
+concurrency:
+  # Cancel a prior nightly still running when a new one kicks off, but
+  # DON'T cancel across the workflow_dispatch inputs — a manual
+  # rebaseline should not clobber an in-flight scheduled audit.
+  group: header-visual-nightly-${{ github.workflow }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: Nightly visual — ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chromium
+            project: chromium-reduced-motion
+          - browser: firefox
+            project: firefox-reduced-motion
+          - browser: webkit
+            project: webkit-reduced-motion
+    env:
+      CI: "true"
+      FORCE_COLOR: "1"
+      BASE_URL: http://localhost:8080
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      LOVABLE_BROWSER_AUTH_STATUS: ${{ secrets.LOVABLE_BROWSER_AUTH_STATUS }}
+      LOVABLE_BROWSER_SUPABASE_STORAGE_KEY: ${{ secrets.LOVABLE_BROWSER_SUPABASE_STORAGE_KEY }}
+      LOVABLE_BROWSER_SUPABASE_SESSION_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_SESSION_JSON }}
+      LOVABLE_BROWSER_SUPABASE_COOKIES_JSON: ${{ secrets.LOVABLE_BROWSER_SUPABASE_COOKIES_JSON }}
+      LOVABLE_BROWSER_SUPABASE_ACCESS_TOKEN: ${{ secrets.LOVABLE_BROWSER_SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Nightly always runs against the tip of main, never a PR SHA.
+          ref: main
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      - name: Cache Playwright ${{ matrix.browser }}
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
+      - name: Install Playwright ${{ matrix.browser }} (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps ${{ matrix.browser }}
+
+      # Manual runs may opt into `--update-snapshots` via the
+      # workflow_dispatch input. Scheduled runs NEVER update — that
+      # would silently accept drift, which is the failure mode this
+      # workflow exists to catch.
+      - name: Run header visual regression (${{ matrix.browser }})
+        run: |
+          set -o pipefail
+          FLAGS=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.update_snapshots }}" = "true" ]; then
+            echo "::warning::Manual rebaseline requested via workflow_dispatch. Snapshots will be regenerated, not asserted."
+            FLAGS="--update-snapshots"
+          fi
+          bunx playwright test \
+            tests/a11y/header-tablet-768-visibility.spec.ts \
+            tests/a11y/header-tablet-parity-768-vs-1024.spec.ts \
+            tests/a11y/header-notifications-popover-focus.spec.ts \
+            --project=${{ matrix.project }} \
+            --reporter=list,html \
+            --output=test-results \
+            $FLAGS
+
+      - name: Upload Playwright HTML report (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-visual-report-${{ matrix.browser }}
+          path: playwright-report/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload snapshot diffs, traces & videos (${{ matrix.browser }})
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-visual-traces-${{ matrix.browser }}
+          path: test-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload snapshot actuals (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-visual-actuals-${{ matrix.browser }}
+          path: |
+            test-results/**/*-actual.png
+            test-results/**/*-diff.png
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # Single tracking issue for slow drift. Runs after the matrix so it
+  # can react to the aggregate result rather than firing three times.
+  triage:
+    name: Nightly triage (open / close tracking issue)
+    needs: audit
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    env:
+      # `needs.audit.result` is 'success' only when every matrix leg
+      # passed; any failed/cancelled leg reports 'failure'/'cancelled'.
+      AUDIT_RESULT: ${{ needs.audit.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Open or comment tracking issue on failure
+        if: env.AUDIT_RESULT != 'success'
+        run: |
+          set -euo pipefail
+          TITLE="Nightly header visual regression: $(date -u +'%Y-%m-%d')"
+          LABEL="nightly-visual-regression"
+          # Reuse an existing open tracking issue if today's already exists.
+          EXISTING=$(gh issue list --repo "$REPO" --label "$LABEL" --state open --json number,title \
+            --jq '.[] | select(.title=="'"$TITLE"'") | .number' | head -n1)
+          BODY=$(cat <<EOF
+          The nightly header visual-regression audit reported \`$AUDIT_RESULT\` on $(date -u +'%Y-%m-%d %H:%M UTC').
+
+          - Run: $RUN_URL
+          - Suites: \`header-tablet-768-visibility\`, \`header-tablet-parity-768-vs-1024\`, \`header-notifications-popover-focus\`
+          - Browsers: chromium, firefox, webkit
+
+          Download the \`nightly-visual-traces-*\` and \`nightly-visual-actuals-*\` artifacts from the run to see the expected / actual / diff PNGs. If the drift is intentional, re-run this workflow via **Actions → Header visual regression — nightly → Run workflow** with \`update_snapshots = true\` to regenerate baselines, then open a PR with the updated PNGs.
+          EOF
+          )
+          if [ -n "${EXISTING:-}" ]; then
+            echo "Commenting on existing tracking issue #$EXISTING"
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+          else
+            echo "Opening new tracking issue: $TITLE"
+            # Create the label idempotently — first-time repos don't have it.
+            gh label create "$LABEL" --repo "$REPO" \
+              --color "d93f0b" \
+              --description "Nightly header visual-regression audit failed" 2>/dev/null || true
+            gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" --body "$BODY"
+          fi
+
+      - name: Auto-close open tracking issues on green
+        if: env.AUDIT_RESULT == 'success'
+        run: |
+          set -euo pipefail
+          LABEL="nightly-visual-regression"
+          # Close every open tracking issue — a green nightly means the
+          # drift is resolved regardless of which day opened the issue.
+          NUMBERS=$(gh issue list --repo "$REPO" --label "$LABEL" --state open --json number --jq '.[].number' || true)
+          if [ -z "${NUMBERS:-}" ]; then
+            echo "No open tracking issues to close."
+            exit 0
+          fi
+          for n in $NUMBERS; do
+            echo "Closing #$n (nightly is green)"
+            gh issue close "$n" --repo "$REPO" --comment "Auto-closing: nightly header visual regression passed on $(date -u +'%Y-%m-%d'). Run: $RUN_URL"
+          done

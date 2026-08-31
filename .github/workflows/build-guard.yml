@@ -1,0 +1,40 @@
+# Production build guard — runs `bun run build:dev` on every PR and push to
+# main. Fails on unresolved imports (Vite [UNRESOLVED_IMPORT] /
+# [UNLOADABLE_DEPENDENCY]) and any other build error, preventing regressions
+# where a route imports a module that does not exist or fails to load.
+name: build-guard
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "public/**"
+      - "scripts/**"
+      - "vite.config.ts"
+      - "tsconfig*.json"
+      - "package.json"
+      - "bun.lockb"
+      - ".github/workflows/build-guard.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run build:dev (fails on unresolved imports)
+        run: bun run build:dev

@@ -1,0 +1,312 @@
+name: Dashboard hydration & theme parity
+
+# Runs the dashboard hydration / theme-parity / diagnostics regression suite
+# on every pull request targeting main, and on pushes to main so nightly
+# regressions are caught even when no PR is open. Any failing test — Vitest
+# unit or Playwright E2E — fails the workflow and blocks merge when this
+# check is marked as required in branch protection.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs when a new commit is pushed to the same ref.
+concurrency:
+  group: dashboard-hydration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Unit + JSDOM suite. Fast (<10s), no browser or backend dependency.
+  #    Covers:
+  #      - theme parity           (src/lib/__tests__/dashboard-hydration.test.tsx)
+  #      - error boundary         (src/components/__tests__/DashboardErrorBoundary.test.tsx)
+  #      - loading-state gating   (src/lib/__tests__/dashboard-gating.test.tsx)
+  #      - diagnostics contract   (src/lib/__tests__/dashboardDiagnostics*.test.ts)
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Vitest — hydration, theme parity, diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      FORCE_COLOR: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run dashboard unit suite
+        run: bun run test:dashboard:unit -- --reporter=default --reporter=junit --outputFile=vitest-report.xml
+
+      - name: Upload Vitest JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-vitest-report
+          path: vitest-report.xml
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 2. Playwright E2E — dashboard hydration-failure scenario.
+  #    Boots the dev server, forces every Supabase REST GET to fail, and
+  #    verifies the loading → error → retry UI + diagnostic event contract.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: Playwright — dashboard hydration failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: unit
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      # Public Supabase build vars — required for `bun run dev` to boot.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions before re-running this workflow."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run dashboard hydration-failure E2E
+        run: bun run test:dashboard:e2e -- --reporter=list,html --output=test-results
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-e2e-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Playwright traces & screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-e2e-traces
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 3. Required check aggregator. Branch protection only needs to require
+  #    this single `regression-gate` context — it goes green only when both
+  #    the unit and e2e jobs pass, and red on any regression.
+  # ---------------------------------------------------------------------------
+  regression-gate:
+    name: Dashboard hydration regression gate
+    runs-on: ubuntu-latest
+    needs: [unit, e2e]
+    if: always()
+    steps:
+      - name: Fail if any dependent job failed
+        env:
+          UNIT: ${{ needs.unit.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "unit=$UNIT  e2e=$E2E"
+          if [ "$UNIT" != "success" ] || [ "$E2E" != "success" ]; then
+            echo "::error::Dashboard hydration/theme-parity regression detected (unit=$UNIT, e2e=$E2E)."
+            exit 1
+          fi
+          echo "All dashboard hydration + theme parity checks passed."

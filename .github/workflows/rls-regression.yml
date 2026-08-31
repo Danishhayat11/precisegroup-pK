@@ -1,0 +1,111 @@
+name: RLS integration regression suite
+
+# Runs every *.sql file under tests/integration/rls/ against the managed
+# database URL. The connecting role must have permission to SET ROLE
+# authenticated (Supabase's `postgres` role does).
+#
+# Required repository secret:
+#   DATABASE_URL — postgres://... connection string with the grant above.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tests/integration/rls/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/rls-regression.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/integration/rls/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/rls-regression.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: rls-regression-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rls-regression:
+    name: Tenant isolation & policy coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify DATABASE_URL secret is set
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::Missing repository secret DATABASE_URL. See tests/integration/rls/README.md."
+            exit 1
+          fi
+
+      - name: Install psql
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Select live fixtures
+        id: fixtures
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          read -r TEST_USER_ID HOME_COMPANY_ID <<<"$(psql "$DATABASE_URL" -tAX -F' ' -c "
+            SELECT p.id, p.company_id
+              FROM public.profiles p
+             WHERE p.company_id IS NOT NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM public.user_roles ur
+                  WHERE ur.user_id = p.id AND ur.role = 'super_admin'
+               )
+             ORDER BY p.id
+             LIMIT 1
+          ")"
+          FOREIGN_COMPANY_ID="$(psql "$DATABASE_URL" -tAX -c "
+            SELECT id
+              FROM public.companies
+             WHERE id <> '${HOME_COMPANY_ID}'::uuid
+             ORDER BY id
+             LIMIT 1
+          ")"
+          if [ -z "$TEST_USER_ID" ] || [ -z "$HOME_COMPANY_ID" ] || [ -z "$FOREIGN_COMPANY_ID" ]; then
+            echo "::error::Could not select fixtures. Need >=1 non-super-admin profile with a company and >=2 companies."
+            exit 1
+          fi
+          echo "user=$TEST_USER_ID home=$HOME_COMPANY_ID foreign=$FOREIGN_COMPANY_ID"
+          {
+            echo "test_user_id=$TEST_USER_ID"
+            echo "home_company_id=$HOME_COMPANY_ID"
+            echo "foreign_company_id=$FOREIGN_COMPANY_ID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run every *.sql regression test
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TEST_USER_ID: ${{ steps.fixtures.outputs.test_user_id }}
+          HOME_COMPANY_ID: ${{ steps.fixtures.outputs.home_company_id }}
+          FOREIGN_COMPANY_ID: ${{ steps.fixtures.outputs.foreign_company_id }}
+        run: |
+          set -euo pipefail
+          FAIL=0
+          for sql in tests/integration/rls/*.sql; do
+            echo
+            echo "=== $(basename "$sql") ==="
+            if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+                -v "test_user_id=$TEST_USER_ID" \
+                -v "home_company_id=$HOME_COMPANY_ID" \
+                -v "foreign_company_id=$FOREIGN_COMPANY_ID" \
+                -f "$sql"; then
+              FAIL=1
+              echo "::error file=$sql::RLS regression test failed"
+            fi
+          done
+          exit "$FAIL"

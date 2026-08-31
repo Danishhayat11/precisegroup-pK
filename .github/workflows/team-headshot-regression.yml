@@ -1,0 +1,146 @@
+# Team headshot regression — runs the Vitest suite that guards the
+# marketing team headshots (Mushtaq, Danish, Saeed) on every push and PR.
+#
+# Covers:
+#   • <picture> AVIF-first / WebP / JPG fallback ordering
+#   • Responsive srcSet widths (320w–1600w) for AVIF + WebP
+#   • Required <img> attrs (alt, width, height, loading, decoding)
+#   • Alt-empty dev guard
+#   • Static audit of every <TeamHeadshot> usage in site.index.tsx
+name: team-headshot-regression
+
+on:
+  pull_request:
+    paths:
+      # The component under test and any sibling <picture>/responsive-image
+      # helpers that could change its rendered output.
+      - "src/components/site/**"
+      # Shared UI primitives / responsive-image / media helpers that
+      # TeamHeadshot may compose or that a future refactor could pull in.
+      # Kept broad on purpose: adding a new `<Picture>` / `ResponsiveImage`
+      # / `useImageLoad` helper anywhere below must re-run this suite.
+      - "src/components/ui/**"
+      - "src/components/media/**"
+      - "src/components/image/**"
+      - "src/lib/image/**"
+      - "src/lib/media/**"
+      - "src/lib/responsive/**"
+      - "src/lib/lqip/**"
+      - "src/utils/image/**"
+      - "src/utils/media/**"
+      - "src/hooks/useImage*.ts"
+      - "src/hooks/useMedia*.ts"
+      - "src/hooks/usePicture*.ts"
+      # Global styles / Tailwind config — aspect-ratio, object-fit, and
+      # transition utilities used by <TeamHeadshot> live here.
+      - "src/styles.css"
+      - "src/index.css"
+      - "tailwind.config.*"
+      - "postcss.config.*"
+      # Route(s) that mount <TeamHeadshot> and are asserted by the suite.
+      - "src/routes/site.index.tsx"
+      # Headshot masters, AVIF/WebP variants, and LQIP placeholders.
+      - "src/assets/site/**"
+      - "src/assets/site/lqip/**"
+      # The regression tests themselves and shared test setup.
+      - "src/__tests__/team-headshot-mushtaq.test.tsx"
+      - "src/__tests__/site-team-section.integration.test.tsx"
+      - "src/test/**"
+      - "vitest.config.ts"
+      - "vite.config.ts"
+      - "tsconfig*.json"
+      # Dependency + workflow changes that affect the test runner itself.
+      - "package.json"
+      - "bun.lockb"
+      - ".github/workflows/team-headshot-regression.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: team-headshot-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Ensure ffprobe is available
+        # The asset validator uses ffprobe to check codec + intrinsic
+        # dimensions of every AVIF/WebP/JPG variant. ubuntu-latest ships
+        # ffmpeg pre-installed, but install explicitly so the check never
+        # silently degrades to existence-only on a runner image refresh.
+        run: ffprobe -version >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Verify TeamHeadshot <picture> assets exist and are valid
+        # Fail fast if any AVIF/WebP/JPG variant referenced by
+        # src/routes/site.index.tsx is missing, mis-encoded (wrong codec
+        # for the extension), or the wrong dimensions for its 4:5 slot —
+        # any of which becomes a broken/oversize <source srcSet> at runtime
+        # that the DOM tests cannot catch on their own.
+        #
+        # The script also writes a full JSON + HTML manifest (every
+        # referenced variant, plus any missing/mis-encoded/wrong-size
+        # entries) to test-artifacts/, which the "Upload asset-check
+        # artifacts" step below uploads unconditionally so reviewers can
+        # debug a failing run without re-running locally.
+        env:
+          TEAM_HEADSHOT_ASSET_REPORT_DIR: test-artifacts
+        run: |
+          mkdir -p test-artifacts
+          node scripts/check-team-headshot-assets.mjs
+
+      - name: Upload asset-check artifacts
+        # `always()` — upload on pass AND fail so the manifest is available
+        # even when the check itself passed (useful for auditing which
+        # variants shipped) and, more importantly, when it failed (so the
+        # missing/mis-encoded variant list is one click away).
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: team-headshot-asset-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-artifacts/team-headshot-assets.json
+            test-artifacts/team-headshot-assets.html
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run team headshot regression tests
+        # Emit machine-readable outputs (JUnit + JSON) alongside the human
+        # `verbose` reporter, and mirror stdout/stderr to a log file so a
+        # failed run can be inspected without re-running locally. `tee`
+        # preserves the runner's live console output while capturing to
+        # disk; `set -o pipefail` ensures a non-zero vitest exit still
+        # fails the job even when piped through tee.
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p test-artifacts
+          bunx vitest run \
+            src/__tests__/team-headshot-mushtaq.test.tsx \
+            src/__tests__/site-team-section.integration.test.tsx \
+            --reporter=verbose \
+            --reporter=junit --outputFile.junit=test-artifacts/vitest-junit.xml \
+            --reporter=json   --outputFile.json=test-artifacts/vitest-results.json \
+            2>&1 | tee test-artifacts/vitest.log
+
+      - name: Upload Vitest artifacts
+        # `always()` — upload on pass AND fail so PR reviewers can inspect
+        # the raw output without re-running the workflow.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: team-headshot-vitest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-artifacts/**
+          if-no-files-found: warn
+          retention-days: 14

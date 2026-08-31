@@ -1,0 +1,603 @@
+name: Responsive audit
+
+on:
+  schedule:
+    # Daily at 06:15 UTC — cheap regression check for viewport overflow.
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Override BASE_URL (leave blank to boot local dev server)"
+        required: false
+        default: ""
+      devices:
+        description: "Devices to audit (comma-separated: mobile,tablet,desktop). Blank = all."
+        required: false
+        default: ""
+      routes:
+        description: "Routes to audit (comma-separated names or paths, e.g. 'site,dashboard' or '/site,/login'). Blank = all."
+        required: false
+        default: ""
+      screenshot_count:
+        description: "Screenshots per (device, route). Default 1; increase to catch layout jitter."
+        required: false
+        default: "1"
+      dev_server_timeout:
+        description: "Seconds to wait for the dev server to accept traffic before failing."
+        required: false
+        default: "120"
+      dev_server_retries:
+        description: "How many times to (re)start the dev server if it fails to come up."
+        required: false
+        default: "2"
+      audit_retries:
+        description: "How many times to retry rows that fail with status=error (per row)."
+        required: false
+        default: "2"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/run-responsive-audit.mjs"
+      - "src/routes/**"
+      - "src/components/**"
+      - "src/styles.css"
+      - ".github/workflows/responsive-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/run-responsive-audit.mjs"
+      - ".github/workflows/responsive-audit.yml"
+
+concurrency:
+  group: responsive-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # peaceiris/actions-gh-pages pushes artifacts to gh-pages
+  pull-requests: write # sticky PR comment with the audit summary
+
+jobs:
+  audit:
+    name: Run responsive audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      FORCE_COLOR: "1"
+      BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:8080' }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      # Try to restore the previous manifest AND its screenshots so the
+      # dashboard's diff view has a baseline and the visual-diff step below
+      # has PNGs to compare against.
+      - name: Restore previous manifest baseline
+        id: baseline-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/responsive-audit/manifest.json
+            public/responsive-audit/screenshots
+          key: responsive-audit-baseline-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            responsive-audit-baseline-${{ github.ref_name }}-
+            responsive-audit-baseline-main-
+
+      # Move the restored screenshots out of the way BEFORE the runner wipes
+      # `screenshots/`. They become the baseline for the visual-diff report.
+      - name: Stash baseline screenshots
+        if: hashFiles('public/responsive-audit/screenshots/*.png') != ''
+        run: |
+          rm -rf public/responsive-audit/baseline-screenshots
+          mv public/responsive-audit/screenshots public/responsive-audit/baseline-screenshots
+          echo "Stashed $(ls public/responsive-audit/baseline-screenshots | wc -l) baseline screenshots"
+
+      - name: Start dev server
+        if: github.event.inputs.base_url == ''
+        env:
+          DEV_SERVER_TIMEOUT: ${{ github.event.inputs.dev_server_timeout || '120' }}
+          DEV_SERVER_RETRIES: ${{ github.event.inputs.dev_server_retries || '2' }}
+        run: |
+          set -u
+          timeout="${DEV_SERVER_TIMEOUT:-120}"
+          retries="${DEV_SERVER_RETRIES:-2}"
+          attempt=0
+          while : ; do
+            attempt=$((attempt+1))
+            echo "::group::Dev server attempt ${attempt} (timeout ${timeout}s)"
+            : > dev-server.log
+            nohup bun run dev > dev-server.log 2>&1 &
+            pid=$!
+            echo "$pid" > dev-server.pid
+            ready=0
+            for i in $(seq 1 "$timeout"); do
+              if curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+                echo "Dev server up after ${i}s (pid ${pid})"
+                ready=1
+                break
+              fi
+              # Bail early if the server process already died.
+              if ! kill -0 "$pid" 2>/dev/null; then
+                echo "Dev server process ${pid} exited before becoming ready"
+                break
+              fi
+              sleep 1
+            done
+            echo "::endgroup::"
+            if [ "$ready" = "1" ]; then
+              exit 0
+            fi
+            echo "::warning::Dev server did not become ready in ${timeout}s on attempt ${attempt}"
+            tail -n 100 dev-server.log || true
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            if [ "$attempt" -gt "$retries" ]; then
+              echo "::error::Dev server failed after ${attempt} attempts"
+              tail -n 200 dev-server.log || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run responsive audit
+        id: audit
+        env:
+          AUDIT_DEVICES: ${{ github.event.inputs.devices }}
+          AUDIT_ROUTES: ${{ github.event.inputs.routes }}
+          AUDIT_SCREENSHOT_COUNT: ${{ github.event.inputs.screenshot_count }}
+          AUDIT_RETRIES: ${{ github.event.inputs.audit_retries || '2' }}
+        run: node scripts/run-responsive-audit.mjs
+
+      - name: Stop dev server
+        if: always() && github.event.inputs.base_url == ''
+        run: |
+          if [ -f dev-server.pid ]; then
+            kill "$(cat dev-server.pid)" 2>/dev/null || true
+          fi
+
+      - name: Stamp run metadata
+        if: always() && hashFiles('public/responsive-audit/manifest.json') != ''
+        env:
+          META_SHA: ${{ github.sha }}
+          META_RUN_ID: ${{ github.run_id }}
+          META_RUN_ATTEMPT: ${{ github.run_attempt }}
+          META_REF: ${{ github.ref_name }}
+        run: |
+          ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          jq -n \
+            --arg sha "$META_SHA" \
+            --arg run_id "$META_RUN_ID" \
+            --arg run_attempt "$META_RUN_ATTEMPT" \
+            --arg ref "$META_REF" \
+            --arg generated_at "$ts" \
+            '{ schema: "lovable.responsive-audit.run-meta/v1", sha: $sha, run_id: $run_id, run_attempt: $run_attempt, ref: $ref, generated_at: $generated_at }' \
+            > public/responsive-audit/lovable-run-meta.json
+
+      - name: Summarize results
+        if: always() && hashFiles('public/responsive-audit/manifest.json') != ''
+        run: |
+          {
+            echo "## Responsive audit"
+            echo ""
+            jq -r '
+              (.results | length) as $n
+              | (reduce .results[] as $r ({ok:0,overflow:0,skipped:0,error:0};
+                  .[$r.status] += 1))
+              | "- total: \($n)\n- ok: \(.ok)\n- overflow: \(.overflow)\n- skipped: \(.skipped)\n- error: \(.error)"
+            ' public/responsive-audit/manifest.json
+            echo ""
+            echo "### Failing rows"
+            jq -r '.results[] | select(.status=="overflow" or .status=="error") | "- `\(.device)` `\(.route)` — \(.status) (\(.overflowPx)px)"' public/responsive-audit/manifest.json || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Pixel-diff each current screenshot against its stashed baseline and
+      # render a small browsable report (index.html + per-shot diff PNGs)
+      # under public/responsive-audit/diff/. Included in the uploaded
+      # artifact and (when enabled) published to gh-pages.
+      - name: Generate visual diff report
+        id: visual-diff
+        if: always() && hashFiles('public/responsive-audit/screenshots/*.png') != ''
+        run: |
+          set -euo pipefail
+          command -v compare >/dev/null 2>&1 || sudo apt-get update -qq && sudo apt-get install -y imagemagick
+          base_dir=public/responsive-audit/baseline-screenshots
+          curr_dir=public/responsive-audit/screenshots
+          diff_dir=public/responsive-audit/diff
+          mkdir -p "$diff_dir"
+          rm -f "$diff_dir"/*.png "$diff_dir"/index.html "$diff_dir"/summary.json
+
+          # Union of baseline + current filenames, one per line, no duplicates.
+          names=$( { ls -1 "$base_dir" 2>/dev/null || true; ls -1 "$curr_dir" 2>/dev/null || true; } \
+                     | grep -E '\.png$' | sort -u )
+
+          total=0; changed=0; unchanged=0; new=0; removed=0
+          rows=""
+          while IFS= read -r name; do
+            [ -z "$name" ] && continue
+            total=$((total+1))
+            base="$base_dir/$name"
+            curr="$curr_dir/$name"
+            diff="$diff_dir/$name"
+            if [ -f "$base" ] && [ -f "$curr" ]; then
+              raw=$(compare -metric AE -fuzz 5% "$base" "$curr" "$diff" 2>&1 || true)
+              delta=$(echo "$raw" | tr -d '[:space:]' | grep -oE '^[0-9]+' || echo 0)
+              if [ "${delta:-0}" -gt 0 ]; then
+                cls=changed; changed=$((changed+1))
+              else
+                cls=same; unchanged=$((unchanged+1))
+              fi
+              rows+="<tr><td>${name}</td><td class=\"${cls}\">${delta}</td><td><img loading=lazy src=\"../baseline-screenshots/${name}\"></td><td><img loading=lazy src=\"../screenshots/${name}\"></td><td><img loading=lazy src=\"${name}\"></td></tr>"
+            elif [ -f "$curr" ]; then
+              new=$((new+1))
+              cp "$curr" "$diff"
+              rows+="<tr><td>${name}</td><td class=\"new\">NEW</td><td>—</td><td><img loading=lazy src=\"../screenshots/${name}\"></td><td><img loading=lazy src=\"${name}\"></td></tr>"
+            else
+              removed=$((removed+1))
+              rows+="<tr><td>${name}</td><td class=\"gone\">REMOVED</td><td><img loading=lazy src=\"../baseline-screenshots/${name}\"></td><td>—</td><td>—</td></tr>"
+            fi
+          done <<< "$names"
+
+          cat > "$diff_dir/index.html" <<HTML
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Responsive audit — visual diff</title>
+          <style>
+            body{font-family:system-ui,sans-serif;margin:2rem;background:#0b0f14;color:#e6edf3}
+            h1{margin-top:0}
+            table{border-collapse:collapse;width:100%}
+            th,td{border-bottom:1px solid #30363d;padding:.5rem;vertical-align:top;text-align:left}
+            th{position:sticky;top:0;background:#0b0f14}
+            img{max-width:340px;height:auto;border:1px solid #30363d;display:block}
+            .changed{color:#f0883e;font-weight:600}
+            .same{color:#3fb950}
+            .new{color:#58a6ff;font-weight:600}
+            .gone{color:#8b949e}
+            .summary{margin:0 0 1rem;color:#8b949e}
+          </style>
+          <h1>Responsive audit — visual diff</h1>
+          <p class="summary">${total} screenshots · <span class="changed">${changed} changed</span> · <span class="same">${unchanged} unchanged</span> · <span class="new">${new} new</span> · <span class="gone">${removed} removed</span></p>
+          <table><thead><tr><th>Screenshot</th><th>Δ px (fuzz 5%)</th><th>Baseline</th><th>Current</th><th>Diff</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+          HTML
+
+          jq -n \
+            --argjson total "$total" \
+            --argjson changed "$changed" \
+            --argjson unchanged "$unchanged" \
+            --argjson new "$new" \
+            --argjson removed "$removed" \
+            '{total:$total, changed:$changed, unchanged:$unchanged, new:$new, removed:$removed}' \
+            > "$diff_dir/summary.json"
+
+          {
+            echo "total=$total"
+            echo "changed=$changed"
+            echo "new=$new"
+            echo "removed=$removed"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo ""
+            echo "### Visual diff"
+            echo "- changed: $changed"
+            echo "- unchanged: $unchanged"
+            echo "- new: $new"
+            echo "- removed: $removed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit artifacts
+        id: upload-artifacts
+        if: always() && hashFiles('public/responsive-audit/manifest.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-audit-${{ github.run_id }}
+          path: public/responsive-audit/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Build PR comment body
+        id: pr-comment
+        if: always() && github.event_name == 'pull_request' && hashFiles('public/responsive-audit/manifest.json') != ''
+        env:
+          ARTIFACT_URL: ${{ steps.upload-artifacts.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          DIFF_CHANGED: ${{ steps.visual-diff.outputs.changed }}
+          DIFF_NEW: ${{ steps.visual-diff.outputs.new }}
+          DIFF_REMOVED: ${{ steps.visual-diff.outputs.removed }}
+          DIFF_TOTAL: ${{ steps.visual-diff.outputs.total }}
+        run: |
+          manifest=public/responsive-audit/manifest.json
+          totals=$(jq -r '
+            (reduce .results[] as $r ({ok:0,overflow:0,skipped:0,error:0}; .[$r.status] += 1))
+            | "\(.ok)|\(.overflow)|\(.skipped)|\(.error)|\(.ok + .overflow + .skipped + .error)"
+          ' "$manifest")
+          IFS='|' read -r ok overflow skipped error total <<<"$totals"
+          failing=$(jq -r '.results[] | select(.status=="overflow" or .status=="error") | "- `\(.device)` `\(.route)` — \(.status)\(if .overflowPx>0 then " (+\(.overflowPx)px)" else "" end)"' "$manifest")
+          if [ "$overflow" -gt 0 ] || [ "$error" -gt 0 ]; then verdict="❌ Failing rows detected"; else verdict="✅ All rows pass"; fi
+          {
+            echo "### 📱 Responsive audit — ${verdict}"
+            echo ""
+            echo "| ok | overflow | skipped | error | total |"
+            echo "| --: | --: | --: | --: | --: |"
+            echo "| ${ok} | ${overflow} | ${skipped} | ${error} | ${total} |"
+            echo ""
+            if [ -n "$failing" ]; then
+              echo "<details><summary><strong>Failing rows</strong></summary>"
+              echo ""
+              echo "$failing"
+              echo ""
+              echo "</details>"
+              echo ""
+            fi
+            if [ -n "${DIFF_TOTAL}" ]; then
+              echo "**Visual diff:** ${DIFF_CHANGED:-0} changed · ${DIFF_NEW:-0} new · ${DIFF_REMOVED:-0} removed (of ${DIFF_TOTAL} screenshots)  "
+            fi
+            echo "**Commit:** \`${COMMIT_SHA}\`  "
+            echo "**Run:** [#${{ github.run_id }}](${RUN_URL})  "
+            if [ -n "$ARTIFACT_URL" ]; then
+              echo "**Artifacts:** [responsive-audit-${{ github.run_id }}](${ARTIFACT_URL}) — manifest, screenshots, and \`diff/index.html\` visual report"
+            else
+              echo "**Artifacts:** see the [workflow run](${RUN_URL}) → Artifacts (open \`diff/index.html\` for the visual report)"
+            fi
+          } > pr-comment.md
+          {
+            echo "body<<PR_COMMENT_EOF"
+            cat pr-comment.md
+            echo "PR_COMMENT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request' && hashFiles('public/responsive-audit/manifest.json') != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: responsive-audit
+          message: ${{ steps.pr-comment.outputs.body }}
+
+      - name: Upload dev-server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-audit-dev-server-log-${{ github.run_id }}
+          path: dev-server.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Optional publish to gh-pages so the dashboard has stable URLs.
+      # Enable by setting repo/org variable PUBLISH_RESPONSIVE_AUDIT=true.
+      # One-time: Settings → Pages → Deploy from branch `gh-pages` `/ (root)`.
+      - name: Compute publish destination
+        id: pub-dest
+        if: always() && vars.PUBLISH_RESPONSIVE_AUDIT == 'true' && hashFiles('public/responsive-audit/manifest.json') != ''
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_dir="responsive-audit/pr-${{ github.event.pull_request.number }}"
+          else
+            safe_ref=$(echo "${{ github.ref_name }}" | tr '/' '-')
+            base_dir="responsive-audit/${safe_ref}"
+          fi
+          {
+            echo "latest_dir=${base_dir}/latest"
+            echo "run_dir=${base_dir}/run-${{ github.run_id }}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish audit (per-run snapshot)
+        if: always() && vars.PUBLISH_RESPONSIVE_AUDIT == 'true' && hashFiles('public/responsive-audit/manifest.json') != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public/responsive-audit
+          publish_branch: gh-pages
+          destination_dir: ${{ steps.pub-dest.outputs.run_dir }}
+          keep_files: true
+          commit_message: "responsive-audit run ${{ github.run_id }} (${{ github.sha }})"
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish audit (stable latest)
+        if: always() && vars.PUBLISH_RESPONSIVE_AUDIT == 'true' && hashFiles('public/responsive-audit/manifest.json') != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public/responsive-audit
+          publish_branch: gh-pages
+          destination_dir: ${{ steps.pub-dest.outputs.latest_dir }}
+          keep_files: false
+          commit_message: "responsive-audit latest: run ${{ github.run_id }} (${{ github.sha }})"
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+
+      # Notify Slack when the manifest contains overflow/error rows. Silently
+      # skipped when the SLACK_WEBHOOK_URL secret is not configured, so forks
+      # and unconfigured repos don't fail here. Runs before the fail step so
+      # the notification fires even though the job then exits non-zero.
+      - name: Notify Slack on failing rows
+        if: always() && hashFiles('public/responsive-audit/manifest.json') != '' && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_URL: ${{ steps.upload-artifacts.outputs.artifact-url }}
+          COMMIT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          manifest=public/responsive-audit/manifest.json
+          totals=$(jq -r '
+            (reduce .results[] as $r ({ok:0,overflow:0,skipped:0,error:0}; .[$r.status] += 1))
+            | "\(.ok)|\(.overflow)|\(.skipped)|\(.error)|\(.ok + .overflow + .skipped + .error)"
+          ' "$manifest")
+          IFS='|' read -r ok overflow skipped error total <<<"$totals"
+          failing=$((overflow + error))
+          if [ "$failing" -eq 0 ]; then
+            echo "No failing rows — skipping Slack notification."
+            exit 0
+          fi
+          # Top 10 failing rows in "- device route — status (+Npx)" format.
+          rows=$(jq -r '
+            [.results[] | select(.status=="overflow" or .status=="error")]
+            | .[0:10]
+            | map("• `\(.device)` `\(.route)` — \(.status)\(if .overflowPx>0 then " (+\(.overflowPx)px)" else "" end)")
+            | join("\n")
+          ' "$manifest")
+          text="🚨 *Responsive audit failing* on \`${REPO}\` (${EVENT} \`${REF_NAME}\`)
+*${failing} failing rows* — overflow: ${overflow}, error: ${error}, ok: ${ok}, skipped: ${skipped}, total: ${total}
+Commit: \`${COMMIT_SHA}\`
+Run: ${RUN_URL}
+${ARTIFACT_URL:+Artifacts: ${ARTIFACT_URL}}
+
+${rows}"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          # --fail so a Slack 4xx/5xx surfaces as a step warning, not a silent success.
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            --data "$payload" "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack webhook POST failed"
+
+      - name: Fail job on overflow/error rows
+        if: hashFiles('public/responsive-audit/manifest.json') != ''
+        run: |
+          failing=$(jq '[.results[] | select(.status=="overflow" or .status=="error")] | length' public/responsive-audit/manifest.json)
+          echo "Failing rows: ${failing}"
+          if [ "${failing}" -gt 0 ]; then
+            echo "::error::Responsive audit reported ${failing} failing rows"
+            exit 1
+          fi

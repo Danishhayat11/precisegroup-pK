@@ -1,0 +1,579 @@
+name: Dashboard payments receipt_no regression
+
+# Runs the Playwright regression that guards against the stale
+# `payments.payment_id` column reference resurfacing on the Dashboard.
+# The spec asserts that the Recent Payments list renders using `receipt_no`
+# and that no Supabase REST 4xx / console error mentions `payment_id`.
+#
+# Runs on every pull request targeting main, on pushes to main, and nightly
+# at 03:17 UTC so regressions surface even during quiet PR periods. Also
+# supports manual dispatch. Any failure blocks merge when this check is
+# required in branch protection.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Nightly at 03:17 UTC — offset from :00 to avoid GitHub cron congestion.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: dashboard-payments-receipt-no-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  e2e:
+    name: Playwright — payments receipt_no
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run payments receipt_no regression
+        # --fully-parallel + --workers spreads the spec's tests across CPUs so
+        # this required gate finishes faster on PRs. --retries=1 absorbs
+        # transient flakes (dev-server warmup, network jitter); persistent
+        # failures still fail the job.
+        run: bun run test:dashboard:payments-receipt-no -- --fully-parallel --workers=50% --retries=1 --reporter=list,html --output=test-results
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-payments-receipt-no-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Playwright traces, screenshots & page HTML
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-payments-receipt-no-traces
+          # test-results/ holds Playwright's retained traces/videos/screenshots
+          # plus the failure-*.png and failure-*.html snapshots attached from
+          # the spec's afterEach hook on any failing test.
+          path: |
+            test-results/
+            playwright-report/data/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Runs every OTHER Playwright spec in parallel with the receipt_no job so
+  # PR turnaround stays low. Sharded across 2 runners; both shards execute
+  # concurrently with `e2e` above (no `needs:` between them). This job is
+  # informational — the required regression gate below only inspects `e2e`,
+  # so a flaky unrelated spec never blocks merge on the receipt_no contract.
+  other-e2e:
+    name: Other Playwright specs (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright Chromium (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright Chromium (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Run other E2E specs (excluding receipt_no)
+        # --shard splits the remaining spec set across 2 runners; --workers
+        # parallelises within each runner. The receipt_no spec is excluded
+        # via --ignore-snapshots-dir style grep since it has its own gated job.
+        run: |
+          bunx playwright test \
+            --ignore="**/dashboard-payments-receipt-no.spec.ts" \
+            --shard=${{ matrix.shard }}/2 \
+            --fully-parallel --workers=50% \
+            --retries=1 --reporter=list,html --output=test-results
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: other-e2e-report-shard-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Nightly cross-browser matrix — runs the receipt_no spec on chromium AND
+  # webkit to catch Safari-only regressions (CSS, IntersectionObserver, fetch
+  # streaming, date parsing). Only runs on the nightly schedule and manual
+  # dispatch to keep PR turnaround fast; PRs stay on the chromium-only `e2e`
+  # required gate above.
+  nightly-cross-browser:
+    name: Nightly cross-browser — payments receipt_no (${{ matrix.project }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium-reduced-motion
+            browser: chromium
+            os: ubuntu-latest
+          - project: webkit-reduced-motion
+            browser: webkit
+            os: ubuntu-latest
+          # WebKit on macOS uses the real Safari WebKit build (not the Linux
+          # port) so we catch platform-specific rendering/text-layout diffs.
+          - project: webkit-reduced-motion
+            browser: webkit
+            os: macos-latest
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright browser (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps ${{ matrix.browser }}
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright browser (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true' && runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps ${{ matrix.browser }}
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate Playwright system deps
+        if: runner.os == 'Linux'
+        run: bash .github/scripts/validate-playwright-apt-deps.sh ${{ matrix.browser }}
+      - name: Run payments receipt_no regression (${{ matrix.project }} on ${{ matrix.os }})
+        run: |
+          bunx playwright test tests/a11y/dashboard-payments-receipt-no.spec.ts \
+            --project=${{ matrix.project }} \
+            --retries=1 --reporter=list,html --output=test-results
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-cross-browser-report-${{ matrix.project }}-${{ matrix.os }}
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Upload traces & failure snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-cross-browser-traces-${{ matrix.project }}-${{ matrix.os }}
+          path: |
+            test-results/
+            playwright-report/data/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  regression-gate:
+    name: Payments receipt_no regression gate
+    runs-on: ubuntu-latest
+    # Only gate on `e2e` — the parallel `other-e2e` shards and the nightly
+    # cross-browser matrix run concurrently for coverage but must NOT block
+    # the required receipt_no contract on PRs.
+    needs: [e2e]
+    if: always()
+    steps:
+      - name: Fail if e2e job failed
+        env:
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "e2e=$E2E"
+          if [ "$E2E" != "success" ]; then
+            echo "::error::payments.receipt_no regression detected (e2e=$E2E)."
+            exit 1
+          fi
+          echo "payments.receipt_no regression check passed."
+
+  # Separate nightly gate: fails the scheduled run if any cross-browser shard
+  # regresses, without affecting the PR-required `regression-gate` above.
+  nightly-cross-browser-gate:
+    name: Nightly cross-browser gate
+    runs-on: ubuntu-latest
+    needs: [nightly-cross-browser]
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Fail if any cross-browser shard failed
+        env:
+          RESULT: ${{ needs.nightly-cross-browser.result }}
+        run: |
+          echo "nightly-cross-browser=$RESULT"
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::Cross-browser regression detected on nightly run (result=$RESULT)."
+            exit 1
+          fi
+          echo "Nightly cross-browser matrix passed."

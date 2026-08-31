@@ -1,0 +1,332 @@
+{
+  "generatedAt": "2026-07-18T07:44:38.062Z",
+  "note": "Grandfathered tap-target violations. New offenders block the build; clear an entry by fixing the underlying JSX (min-h-11 min-w-11) or adding an inline // allow-small-tap: <reason> comment. Re-run with `node scripts/ci/tap-target-audit.mjs --update-allowlist` after intentional cleanup.",
+  "minTapPx": 44,
+  "entries": [
+    {
+      "file": "src/components/ActiveProjectSwitcher.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/AllocationBuilder.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/AllocationBuilder.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/components/BookingForm.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/DashboardAI.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/DocumentVault.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/DocumentVault.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/DocumentVault.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/GlobalSearch.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/PaymentBreakdown.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PaymentBreakdown.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PaymentBreakdown.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PaymentCommentsPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PaymentForm.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PaymentForm.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PaymentHistoryDialog.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PreciseAssistantPanel.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/PreciseAssistantPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/PreciseAssistantPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button asChild size=\"sm\" variant=\"outline\" className=\"h-7 text-xs\">"
+    },
+    {
+      "file": "src/components/print/FitSummary.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/security/IgnoreMemoryDebugPanel.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/components/ThemeToggle.tsx",
+      "rule": "R1",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/ui/calendar.tsx",
+      "rule": "R1",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/components/ui/input.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/components/ui/sidebar.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/components/ui/sidebar.tsx",
+      "rule": "R1",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/AuditLog.tsx",
+      "rule": "R2",
+      "snippet": "<Button size=\"sm\" variant=\"ghost\" onClick={copy} className=\"h-6 px-2 text-xs\">"
+    },
+    {
+      "file": "src/pages/Bookings.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/pages/Bookings.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/pages/Bookings.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Bookings.tsx",
+      "rule": "R2",
+      "snippet": "<Button variant=\"outline\" size=\"sm\" className=\"h-9 gap-1.5 ml-auto\">"
+    },
+    {
+      "file": "src/pages/DocumentView.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/DocumentView.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/DocumentView.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/pages/DocumentView.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/pages/ImportCenter.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/ImportCenter.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/ImportCenter.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/ImportCenter.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/pages/Payments.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/routes/_authenticated/debugger.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/routes/_authenticated/debugger.tsx",
+      "rule": "R2",
+      "snippet": "<Button"
+    },
+    {
+      "file": "src/routes/chart-preview.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/routes/chart-preview.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/routes/chart-preview.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/routes/chart-preview.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/routes/fit-tester.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/routes/fit-tester.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/routes/fit-tester.tsx",
+      "rule": "R2",
+      "snippet": "<button"
+    },
+    {
+      "file": "src/routes/fit-tester.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    },
+    {
+      "file": "src/routes/fit-tester.tsx",
+      "rule": "R2",
+      "snippet": "<input"
+    }
+  ]
+}

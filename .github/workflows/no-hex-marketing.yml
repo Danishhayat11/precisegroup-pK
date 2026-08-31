@@ -1,0 +1,45 @@
+name: No hex colors in marketing/shell
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/routes/site**"
+      - "src/components/site/**"
+      - "src/components/AppShell**"
+      - "src/components/**Chrome**"
+      - "scripts/ci/no-hex-in-marketing-shell.mjs"
+      - ".github/workflows/no-hex-marketing.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/routes/site**"
+      - "src/components/site/**"
+      - "src/components/AppShell**"
+      - "src/components/**Chrome**"
+      - "scripts/ci/no-hex-in-marketing-shell.mjs"
+      - ".github/workflows/no-hex-marketing.yml"
+
+concurrency:
+  group: no-hex-marketing-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  no-hex:
+    name: Reject hard-coded hex color literals
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Scan marketing + shell surfaces
+        run: node scripts/ci/no-hex-in-marketing-shell.mjs

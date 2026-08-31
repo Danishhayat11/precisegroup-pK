@@ -1,0 +1,42 @@
+{
+  "_help": {
+    "purpose": "Pinned reconciled totals for one booking. The auditor (scripts/audit/booking-reconciliation.mjs) diffs these against live `installment_ledger` rows and the cached `bookings` row, failing CI on any drift.",
+    "how_to_use": [
+      "1. Copy this file to scripts/audit/expectations/<BOOKING_ID>.json (e.g. BK-MA-00016.json).",
+      "2. Replace booking_id and label.",
+      "3. Fill every value in `expected` with the reconciled total (PKR, integers, no commas).",
+      "4. Add <BOOKING_ID> to the `booking-reconciliation` matrix in .github/workflows/security.yml.",
+      "5. Run locally to verify: `node scripts/audit/booking-reconciliation.mjs <BOOKING_ID>`."
+    ],
+    "field_glossary": {
+      "cash_received": "Sum of paid_amount across ALL ledger rows (down payment + installments + possession).",
+      "remaining_balance": "total_contract_value − cash_received. Must be >= 0.",
+      "total_contract_value": "Sum of due_amount across ALL ledger rows. Should match bookings.total_contract_value.",
+      "current_overdue_count": "Count of installment rows (excluding down payment and possession) with due_date < today AND (due - paid) > 0.",
+      "total_overdue_amount": "Sum of (due - paid) across the rows counted in current_overdue_count.",
+      "installments_paid": "Sum of paid_amount where particulars matches /^installment/i.",
+      "possession_paid": "Sum of paid_amount where particulars matches /possession/i. This is the 'possession_advance' shown in the dashboard.",
+      "down_payment_paid": "Sum of paid_amount where particulars matches /down payment/i."
+    },
+    "validation_rules": [
+      "down_payment_paid + installments_paid + possession_paid === cash_received",
+      "cash_received + remaining_balance === total_contract_value",
+      "current_overdue_count === 0  ⇔  total_overdue_amount === 0",
+      "All values are integers in PKR (no decimals, no currency symbols, no commas)."
+    ]
+  },
+
+  "booking_id": "BK-XX-00000",
+  "label": "Client Name, Project Name",
+
+  "expected": {
+    "cash_received": 0,
+    "remaining_balance": 0,
+    "total_contract_value": 0,
+    "current_overdue_count": 0,
+    "total_overdue_amount": 0,
+    "installments_paid": 0,
+    "possession_paid": 0,
+    "down_payment_paid": 0
+  }
+}

@@ -1,0 +1,70 @@
+ Sr.     Due Date               Amount    Paid Date        Paid            Balance    Status
+                                 (PKR)                                       (PKR)
+
+ 1       Down                  500,000    27-Dec-       500,000                  0    Paid
+         Payment                          2025
+         12-Apr-2025
+
+ 2       Installment 01        675,000    27-Dec-       675,000                  0    Paid
+         04-Apr-2025                      2025
+
+ 3       Installment 02        675,000    27-Dec-       675,000                  0    Paid
+         04-Jul-2025                      2025
+
+ 4       Installment 03        675,000    27-Dec-       675,000                  0    Paid
+         04-Oct-2025                      2025
+
+ 5       Installment 04        675,000    27-Dec-       675,000                  0    Paid
+         04-Jan-2026                      2025
+
+ 6       Installment 05        675,000    27-Dec-       675,000                  0    Paid
+         04-Apr-2026                      2025
+
+ 7       Installment 06        675,000    27-Dec-       675,000                  0    Paid
+         04-Jul-2026                      2025
+
+ 8       Installment 07        675,000    27-Dec-       125,000            550,000    Pending
+         04-Oct-2026                      2025
+
+ 9       Installment 08        675,000    —                    0           675,000    Pending
+         04-Jan-2027
+
+ 10      Possession          3,500,000    —                    0          3,500,000   Pending
+         04-Oct-2027
+
+ Total                      5,400,000
+ Installments
+
+ Possession Amount          3,500,000
+
+ Down Payment                 500,000
+
+ GRAND TOTAL                9,400,000     (Must equal Total Sale Price)
+
+
+  STATUS SUMMARY AS OF 27-JUN-2026
+
+
+ Total Paid                                                                  PKR 4,675,000
+
+ Outstanding Balance                                                         PKR 4,725,000
+
+ Overdue Installments                                               0 installments (PKR 0)
+
+
+Terms: Installments must be paid strictly on due dates. Delay of three (3) or more
+consecutive installments shall entitle the Company to cancel the booking in accordance
+with the agreed terms, without further notice.
+
+
+
+
+For and on behalf of                             Client Acknowledgment
+Precise Realtors & Builders (Pvt.)
+Ltd.
+
+
+                                                 Signature
+                                                 Name: ___________________________
+Authorized Signatory                             Date: ___________________________
+

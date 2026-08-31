@@ -1,0 +1,36 @@
+name: csv-export-helpers
+
+concurrency:
+  group: csv-export-helpers-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  csv-export-helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # 1. Contract check — every export surface (Dashboard, ImportCenter,
+      #    DataHealth) must import + call the shared CSV metadata helper.
+      - name: CSV export helper contract
+        run: bun run check:csv:exports
+
+      # 2. Unit tests for the writer + parser (proves the helpers
+      #    themselves compile and behave under both TS and Vitest).
+      - name: CSV helper unit tests
+        run: bun run test:csv:exports
+
+      # 3. Whole-project typecheck — catches any compile error introduced
+      #    in the three export surfaces or the helper modules they import.
+      - name: TypeScript typecheck
+        run: bun run typecheck

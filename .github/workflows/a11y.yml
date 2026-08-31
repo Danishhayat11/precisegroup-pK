@@ -1,0 +1,1781 @@
+name: Accessibility tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs when a new commit is pushed to the same ref.
+concurrency:
+  group: a11y-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # peaceiris/actions-gh-pages pushes to the gh-pages branch
+  pull-requests: write
+
+jobs:
+  test-a11y:
+    name: Hero tiles (Playwright + reduced-motion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      # Verbose logging to make CI failures easier to diagnose.
+      DEBUG: "pw:api,pw:browser*,pw:protocol"
+      PLAYWRIGHT_HTML_REPORT: playwright-report
+      PWDEBUG: "0"
+      FORCE_COLOR: "1"
+      BUN_DEBUG_QUIET_LOGS: "0"
+      VERBOSE: "1"
+      # Public Supabase build vars — required for `bun run dev` to boot.
+      # Configure these as repo/environment secrets; the job fails early if missing.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      # KPI axe baseline mode. Default (0): baseline-aware — CI only fails
+      # on NEW violations vs the cached `.axe-snapshots/baseline/` set.
+      # Set repo/workflow variable AXE_KPI_STRICT=1 (e.g. from a scheduled
+      # "true zero" nightly) to enforce zero violations regardless of baseline.
+      AXE_KPI_STRICT: ${{ vars.AXE_KPI_STRICT || '0' }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions before re-running this workflow."
+            exit 1
+          fi
+          echo "All required VITE_SUPABASE_* secrets are present."
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile --verbose
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Resolve the exact Playwright version installed in node_modules and
+      # use it as the browser-cache key. Keying on `bun.lock` invalidates
+      # the ~450 MB browser cache on every unrelated dependency bump; keying
+      # on the Playwright package version only busts the cache when the
+      # binaries actually change (browser revisions are pinned per
+      # Playwright release), turning most CI runs into an instant cache hit.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          set -euo pipefail
+          version=$(node -e "console.log(require('@playwright/test/package.json').version)")
+          echo "Playwright version: ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-v${{ steps.pw-version.outputs.version }}-cwf
+          # No `restore-keys` — a partial hit (e.g. an older Playwright
+          # version) leaves stale binaries on disk that `playwright install`
+          # then skips as "already present", producing broken runs. Miss
+          # cleanly and reinstall when the version changes.
+
+      # Install all three browsers so the dashboard KPI snapshot checks
+      # (tests/a11y/dashboard-kpi-cards.spec.ts) run across the full
+      # chromium + webkit + firefox matrix defined in playwright.config.ts.
+      # `--with-deps` pulls the required apt system libraries on the
+      # Ubuntu runner (libwebkit2gtk, libgtk-3, libgstreamer, etc.).
+      # Cache miss (~2-3 min): full browser download + apt install.
+
+      - name: Report Playwright cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.playwright-cache.outputs.cache-hit }}'
+          key='${{ steps.playwright-cache.outputs.cache-primary-key }}'
+          matched='${{ steps.playwright-cache.outputs.cache-matched-key }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            size=$(du -sh "$HOME/.cache/ms-playwright" 2>/dev/null | cut -f1)
+          fi
+          echo "::group::Playwright browser cache"
+          echo "status      : $status"
+          echo "primary key : $key"
+          echo "matched key : ${matched:-<none>}"
+          echo "cache size  : $size"
+          echo "::endgroup::"
+          {
+            echo "### Playwright browser cache"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Status | **$status** |"
+            echo "| Primary key | \`$key\` |"
+            echo "| Matched key | \`${matched:-<none>}\` |"
+            echo "| Cache dir size | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright browsers (cache miss)"
+          start=$SECONDS
+          bunx playwright install --with-deps chromium webkit firefox
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright browsers (cache miss)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      # Cache HIT fast path (~15-25s vs ~2-3 min):
+      # The ~/.cache/ms-playwright browser binaries are restored from cache,
+      # but the runner's apt-level system libraries are NOT cached (they
+      # live under /usr/lib and would blow up the cache size). Reinstall
+      # only the OS deps for all three engines so webkit / firefox can
+      # actually launch — `install-deps` runs apt without re-downloading
+      # any browser binary.
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "::group::Playwright install — Install Playwright system deps (cache hit)"
+          start=$SECONDS
+          bunx playwright install-deps chromium webkit firefox
+          elapsed=$(( SECONDS - start ))
+          echo "install elapsed: ${elapsed}s"
+          echo "::endgroup::"
+          echo "- **Install Playwright system deps (cache hit)** — ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      # Validate that the apt packages Playwright's install-deps step (or the
+      # cached browser image) placed on the runner actually satisfy every
+      # shared-library dependency of chromium/webkit/firefox — and, when a
+      # lockfile exists under .github/playwright-apt-lock/, that the pinned
+      # package set is still present. Guards against upstream apt package
+      # renames or removals silently breaking WebKit/Firefox launch.
+      - name: Validate Playwright system deps
+        run: bash .github/scripts/validate-playwright-apt-deps.sh chromium webkit firefox
+
+      - name: Print tool versions
+        run: |
+          echo "::group::Versions"
+          bun --version
+          bunx playwright --version
+          node --version || true
+          echo "::endgroup::"
+
+      # Guard against silent drift between playwright.config.ts and this
+      # workflow. `test:a11y` runs `playwright test` with no --project
+      # flag, so Playwright expands to EVERY project defined in the
+      # config. If a new project is added (or an existing one removed)
+      # without also updating the browser-install step above, the KPI
+      # snapshot spec would either skip an engine or crash on a missing
+      # binary. This step re-lists the resolved project set and fails
+      # loudly if it doesn't match the expected chromium+webkit+firefox
+      # matrix the install step provisioned.
+      - name: Verify Playwright projects match install matrix
+        run: |
+          set -euo pipefail
+          expected="chromium-reduced-motion firefox-reduced-motion webkit-reduced-motion"
+          actual=$(bunx playwright test --list --reporter=json tests/a11y/dashboard-kpi-cards.spec.ts \
+            | node -e '
+              let s = "";
+              process.stdin.on("data", (d) => (s += d));
+              process.stdin.on("end", () => {
+                const j = JSON.parse(s);
+                const names = new Set();
+                const walk = (suite) => {
+                  for (const spec of suite.specs ?? []) {
+                    for (const t of spec.tests ?? []) names.add(t.projectName);
+                  }
+                  for (const child of suite.suites ?? []) walk(child);
+                };
+                for (const s of j.suites ?? []) walk(s);
+                console.log([...names].sort().join(" "));
+              });
+            ')
+          echo "Expected projects: ${expected}"
+          echo "Actual   projects: ${actual}"
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::playwright.config.ts projects drifted from the CI browser-install matrix."
+            echo "Update the 'Install Playwright browsers' step above and this guard together."
+            exit 1
+          fi
+
+      # Restore the KPI axe-core snapshot baseline from the previous run on
+      # this ref (falling back to main). `.axe-snapshots/baseline/` holds the
+      # last normalized violation set per KPI test; the diff script below
+      # compares this run's `axe-results/` against it. Keyed with a rotating
+      # timestamp component so `actions/cache` always saves a fresh copy on
+      # each run (the write happens post-job automatically).
+      - name: Restore KPI axe snapshot baseline
+        id: axe-snapshot-cache
+        uses: actions/cache@v4
+        with:
+          path: .axe-snapshots/baseline
+          key: ${{ runner.os }}-axe-kpi-snapshot-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-axe-kpi-snapshot-${{ github.ref_name }}-
+            ${{ runner.os }}-axe-kpi-snapshot-main-
+            ${{ runner.os }}-axe-kpi-snapshot-
+
+      - name: Run accessibility tests
+        id: run-tests
+        continue-on-error: false
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-results.json
+        run: bun run test:a11y -- --reporter=list,html,json --trace=on --output=test-results
+
+      # Compare this run's KPI axe violations against the restored baseline
+      # snapshot. Runs on both pass and failure — knowing what disappeared
+      # (fixed) is as valuable as knowing what appeared (regressed). Never
+      # fails the job; the axe spec itself gates on new violations.
+      - name: Diff KPI axe snapshot vs baseline
+        id: axe-snapshot-diff
+        if: always()
+        run: |
+          set -euo pipefail
+          node scripts/axe-snapshot-diff.mjs
+          if [ -f .axe-snapshots/diff.md ]; then
+            {
+              echo ""
+              cat .axe-snapshots/diff.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload KPI axe snapshot + diff
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-kpi-snapshot
+          path: |
+            .axe-snapshots/current/
+            .axe-snapshots/baseline/
+            .axe-snapshots/diff.json
+            .axe-snapshots/diff.md
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Convert the per-test axe-core JSON files that
+      # tests/a11y/dashboard-kpi-axe.spec.ts drops under ./axe-results/
+      # into a single self-contained HTML report at axe-report/index.html.
+      # Runs on failure only — that's when the report is actionable, and
+      # the a11y job is already noisy on the green path.
+      - name: Generate axe HTML report (on failure)
+        id: axe-html
+        if: failure() && steps.run-tests.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          if [ ! -d axe-results ] || [ -z "$(ls -A axe-results 2>/dev/null || true)" ]; then
+            echo "no axe-results/ payload — skipping HTML report generation"
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node scripts/axe-results-to-html.mjs
+          if [ -f axe-report/index.html ]; then
+            size=$(du -h axe-report/index.html | cut -f1)
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### axe-core report"
+              echo ""
+              echo "Generated \`axe-report/index.html\` (${size}) — uploaded as artifact **axe-report**."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "generator ran but no output was produced"
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload axe HTML report
+        if: failure() && steps.axe-html.outputs.generated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-report
+          path: |
+            axe-report/
+            axe-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Inspect what the test step actually produced so downstream steps can
+      # upload traces/screenshots independently of whether the HTML report was
+      # generated. The HTML reporter can fail (e.g. crash mid-write, OOM, disk)
+      # while traces and screenshots from earlier-completed tests remain on
+      # disk — we want those preserved regardless.
+      - name: Detect Playwright outputs
+        id: detect-outputs
+        if: always()
+        run: |
+          set -u
+          report_present=false
+          traces_present=false
+          screens_present=false
+          results_json_present=false
+          [ -f playwright-report/index.html ] && report_present=true
+          [ -f playwright-results.json ]      && results_json_present=true
+          if [ -d test-results ]; then
+            compgen -G "test-results/**/*.zip"                                 > /dev/null 2>&1 && traces_present=true
+            compgen -G "test-results/**/*.png" > /dev/null 2>&1 || \
+              compgen -G "test-results/**/*.jpg" > /dev/null 2>&1 || \
+              compgen -G "test-results/**/*.webm" > /dev/null 2>&1            && screens_present=true
+          fi
+          echo "::group::Playwright outputs on disk"
+          echo "playwright-report/index.html : ${report_present}"
+          echo "playwright-results.json      : ${results_json_present}"
+          echo "trace zips under test-results: ${traces_present}"
+          echo "screens/videos under test-results: ${screens_present}"
+          echo "::endgroup::"
+          if [ "$report_present" = "false" ] && { [ "$traces_present" = "true" ] || [ "$screens_present" = "true" ]; }; then
+            echo "::warning title=HTML report missing::Playwright HTML report was not generated, but trace/screenshot artifacts ARE present — they will still be uploaded for debugging."
+          fi
+          {
+            echo "report_present=${report_present}"
+            echo "traces_present=${traces_present}"
+            echo "screens_present=${screens_present}"
+            echo "results_json_present=${results_json_present}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Stamp the HTML report directory with a sidecar metadata file BEFORE
+      # uploading, so we can later confirm the uploaded artifact corresponds to
+      # this exact run attempt + commit SHA (and didn't get mixed up with a
+      # cached/stale report, a re-run with a different SHA, or a cross-job copy).
+      # The Playwright HTML report itself carries no run-id / SHA metadata, so
+      # the sidecar is our source of truth.
+      - name: Stamp HTML report with run metadata
+        id: stamp-report
+        if: always() && steps.detect-outputs.outputs.report_present == 'true'
+        env:
+          META_SHA: ${{ github.sha }}
+          META_RUN_ID: ${{ github.run_id }}
+          META_RUN_ATTEMPT: ${{ github.run_attempt }}
+          META_RUN_NUMBER: ${{ github.run_number }}
+          META_WORKFLOW: ${{ github.workflow }}
+          META_JOB: ${{ github.job }}
+          META_REF: ${{ github.ref }}
+          META_REF_NAME: ${{ github.ref_name }}
+          META_REPO: ${{ github.repository }}
+          META_ACTOR: ${{ github.actor }}
+          META_EVENT: ${{ github.event_name }}
+        run: |
+          set -u
+          mkdir -p playwright-report
+          ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          meta_file="playwright-report/lovable-run-meta.json"
+          jq -n \
+            --arg sha           "$META_SHA" \
+            --arg run_id        "$META_RUN_ID" \
+            --arg run_attempt   "$META_RUN_ATTEMPT" \
+            --arg run_number    "$META_RUN_NUMBER" \
+            --arg workflow      "$META_WORKFLOW" \
+            --arg job           "$META_JOB" \
+            --arg ref           "$META_REF" \
+            --arg ref_name      "$META_REF_NAME" \
+            --arg repository    "$META_REPO" \
+            --arg actor         "$META_ACTOR" \
+            --arg event         "$META_EVENT" \
+            --arg generated_at  "$ts" \
+            '{
+              schema: "lovable.a11y.run-meta/v1",
+              repository: $repository,
+              workflow: $workflow,
+              job: $job,
+              event: $event,
+              ref: $ref,
+              ref_name: $ref_name,
+              sha: $sha,
+              run_id: $run_id,
+              run_attempt: ($run_attempt | tonumber? // $run_attempt),
+              run_number: ($run_number  | tonumber? // $run_number),
+              actor: $actor,
+              generated_at: $generated_at
+            }' > "$meta_file"
+          echo "::group::Sidecar metadata written to ${meta_file}"
+          cat "$meta_file"
+          echo "::endgroup::"
+          echo "meta_path=${meta_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Playwright HTML report
+        id: upload-report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Re-download the just-uploaded artifact into an isolated directory and
+      # verify the sidecar matches this run + SHA. This catches:
+      #   - cached/stale playwright-report directories accidentally re-uploaded
+      #   - SHA drift between checkout and report generation
+      #   - rerun-failed-jobs picking up the wrong artifact name
+      # The check is strict on SHA / run_id / run_attempt; mismatches fail the job.
+      - name: Verify uploaded HTML report matches current run
+        id: verify-report-meta
+        if: always() && steps.upload-report.outputs.artifact-id != ''
+        env:
+          EXPECT_SHA: ${{ github.sha }}
+          EXPECT_RUN_ID: ${{ github.run_id }}
+          EXPECT_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -u
+          verify_dir="$RUNNER_TEMP/verify-report"
+          rm -rf "$verify_dir" && mkdir -p "$verify_dir"
+          echo "Re-downloaded artifact will be inspected at: ${verify_dir}"
+          # The download happens in the next step; this step continues there
+          # via a marker output so the action can run in isolation.
+          echo "verify_dir=${verify_dir}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-download uploaded HTML report for verification
+        id: redownload-report
+        if: always() && steps.verify-report-meta.outputs.verify_dir != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: ${{ steps.verify-report-meta.outputs.verify_dir }}
+
+      - name: Parse sidecar and confirm run identity
+        id: confirm-report-meta
+        if: always() && steps.redownload-report.outcome == 'success'
+        env:
+          EXPECT_SHA: ${{ github.sha }}
+          EXPECT_RUN_ID: ${{ github.run_id }}
+          EXPECT_RUN_ATTEMPT: ${{ github.run_attempt }}
+          VERIFY_DIR: ${{ steps.verify-report-meta.outputs.verify_dir }}
+        run: |
+          set -u
+          meta="${VERIFY_DIR}/lovable-run-meta.json"
+          echo "::group::Verifying uploaded HTML report"
+          echo "expect sha          = ${EXPECT_SHA}"
+          echo "expect run_id       = ${EXPECT_RUN_ID}"
+          echo "expect run_attempt  = ${EXPECT_RUN_ATTEMPT}"
+          if [ ! -f "$meta" ]; then
+            echo "::error title=Report sidecar missing::Uploaded artifact has no lovable-run-meta.json — cannot prove report origin."
+            echo "match=fail" >> "$GITHUB_OUTPUT"
+            echo "::endgroup::"
+            exit 1
+          fi
+          echo "Sidecar contents:"
+          cat "$meta"
+          got_sha=$(jq -r '.sha'         "$meta")
+          got_run=$(jq -r '.run_id'      "$meta")
+          got_att=$(jq -r '.run_attempt' "$meta")
+          # Confirm presence of index.html in the re-downloaded bundle too.
+          if [ ! -f "${VERIFY_DIR}/index.html" ]; then
+            echo "::warning title=Report index missing in re-download::lovable-run-meta.json present but index.html absent in re-downloaded artifact."
+          fi
+          fail=0
+          [ "$got_sha" = "$EXPECT_SHA" ]               || { echo "::error::SHA mismatch: got=${got_sha} expected=${EXPECT_SHA}"; fail=1; }
+          [ "$got_run" = "$EXPECT_RUN_ID" ]            || { echo "::error::run_id mismatch: got=${got_run} expected=${EXPECT_RUN_ID}"; fail=1; }
+          [ "$got_att" = "$EXPECT_RUN_ATTEMPT" ]       || { echo "::error::run_attempt mismatch: got=${got_att} expected=${EXPECT_RUN_ATTEMPT}"; fail=1; }
+          if [ "$fail" -eq 1 ]; then
+            echo "match=fail" >> "$GITHUB_OUTPUT"
+            echo "::endgroup::"
+            exit 1
+          fi
+          echo "✅ Uploaded HTML report verified against current run (sha + run_id + run_attempt all match)."
+          echo "match=pass" >> "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+      # Optional: publish the HTML report to GitHub Pages (gh-pages branch) so it
+      # opens directly at a URL — no download, no auth wall — and is shareable as
+      # a stable per-PR or per-run link.
+      #
+      # Enable by setting repo/org variable PUBLISH_HTML_REPORT=true. One-time setup:
+      # in the repo's Settings → Pages, set Source to "Deploy from a branch" →
+      # branch `gh-pages` → folder `/ (root)`. The first run creates the branch.
+      #
+      # Layout on the gh-pages branch (kept_files preserves siblings between runs):
+      #   pr-<number>/            ← stable per-PR preview, overwritten on each push
+      #   main/run-<runId>/       ← per-run snapshot for pushes to main
+      #
+      # ⚠️ The gh-pages branch is PUBLIC on public repos. Do not enable if the
+      # HTML report could contain secrets, internal hostnames, or PII.
+      # Layout on gh-pages (per PR):
+      #   pr-<n>/latest/           ← STABLE per-PR URL — always the latest run.
+      #                              Safe to bookmark / paste in PR descriptions.
+      #   pr-<n>/run-<runId>/      ← Immutable snapshot of each individual run,
+      #                              useful when comparing runs or auditing.
+      # For pushes (main / branch), the same shape is used:
+      #   <branch>/latest/  +  <branch>/run-<runId>/
+      - name: Compute report preview destinations
+        id: report-dest
+        if: always() && vars.PUBLISH_HTML_REPORT == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_dir="pr-${{ github.event.pull_request.number }}"
+          else
+            # Sanitize ref_name for filesystem use (slashes → dashes).
+            safe_ref=$(echo "${{ github.ref_name }}" | tr '/' '-')
+            base_dir="${safe_ref}"
+          fi
+          latest_dir="${base_dir}/latest"
+          run_dir="${base_dir}/run-${{ github.run_id }}"
+
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          repo_name="${{ github.event.repository.name }}"
+          base_url="https://${owner_lc}.github.io/${repo_name}"
+
+          {
+            echo "base_dir=${base_dir}"
+            echo "latest_dir=${latest_dir}"
+            echo "run_dir=${run_dir}"
+            # `dir` / `url` preserved for backward compat with existing steps —
+            # point them at the STABLE latest URL.
+            echo "dir=${latest_dir}"
+            echo "url=${base_url}/${latest_dir}/"
+            echo "url_latest=${base_url}/${latest_dir}/"
+            echo "url_run=${base_url}/${run_dir}/"
+          } >> "$GITHUB_OUTPUT"
+          echo "Stable per-PR/branch URL:  ${base_url}/${latest_dir}/"
+          echo "Immutable per-run URL:     ${base_url}/${run_dir}/"
+
+      # Publish the immutable per-run snapshot first so the stable copy below
+      # is guaranteed to mirror an existing archived run.
+      - name: Publish HTML report to GitHub Pages (per-run snapshot)
+        id: publish-report-run
+        if: always() && vars.PUBLISH_HTML_REPORT == 'true' && hashFiles('playwright-report/index.html') != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./playwright-report
+          publish_branch: gh-pages
+          destination_dir: ${{ steps.report-dest.outputs.run_dir }}
+          keep_files: true
+          commit_message: "a11y report (run snapshot): ${{ github.workflow }} run ${{ github.run_id }} (${{ github.sha }})"
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+
+      # Stable per-PR/branch path. `keep_files: false` here so old report assets
+      # from the previous run don't linger and confuse the index.
+      - name: Publish HTML report to GitHub Pages (stable latest)
+        id: publish-report
+        if: always() && vars.PUBLISH_HTML_REPORT == 'true' && hashFiles('playwright-report/index.html') != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./playwright-report
+          publish_branch: gh-pages
+          destination_dir: ${{ steps.report-dest.outputs.latest_dir }}
+          keep_files: false
+          commit_message: "a11y report (latest): ${{ github.workflow }} run ${{ github.run_id }} (${{ github.sha }})"
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+
+      - name: Upload Playwright traces
+        id: upload-traces
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.zip
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Playwright screenshots & videos
+        id: upload-screens
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: |
+            test-results/**/*.png
+            test-results/**/*.jpg
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload raw test-results directory
+        id: upload-raw
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # KPI / DashboardBrief specs write per-run audit PNGs to
+      # /tmp/browser/dashboard-*  (kpi-grid.png, hero.png, brief.png,
+      # risk-rails.png). Playwright's own snapshot-diff outputs
+      # (`*-expected.png`, `*-actual.png`, `*-diff.png`) already land under
+      # test-results/ and are uploaded by the steps above — but the
+      # audit PNGs live outside test-results/ and would otherwise be lost.
+      # Grouped into ONE artifact per run so a reviewer can download it
+      # and eyeball chromium / webkit / firefox side-by-side (the file
+      # names carry the project suffix, e.g. kpi-grid-webkit-reduced-motion.png).
+      - name: Upload KPI / DashboardBrief audit screenshots
+        id: upload-kpi-audit
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-kpi-audit-screens
+          path: |
+            /tmp/browser/dashboard-kpi-cards/**/*.png
+            /tmp/browser/dashboard-brief-visual/**/*.png
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Snapshot-diff triad for the KPI / brief specs specifically —
+      # a focused artifact separate from the giant `playwright-screenshots`
+      # bundle so a reviewer can jump straight to the visual regression
+      # without scrolling past every axe/a11y screenshot. Playwright names
+      # these `<snapshot>-expected.png`, `<snapshot>-actual.png`,
+      # `<snapshot>-diff.png` under test-results/<test>/ per project.
+      - name: Upload KPI / DashboardBrief snapshot diffs
+        id: upload-kpi-diffs
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-kpi-snapshot-diffs
+          path: |
+            test-results/**/kpi-grid-*.png
+            test-results/**/hero-*.png
+            test-results/**/brief-*.png
+            test-results/**/risk-rails-*.png
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload playwright-results.json
+        id: upload-results-json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-json
+          path: playwright-results.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Retry mechanism for failed/empty artifact uploads.
+      #
+      # actions/upload-artifact@v4 can transiently fail (network blips, GitHub
+      # API 5xx, slow zipping) and return an empty artifact-id even though
+      # files were on disk. We retry each upload up to TWO additional times
+      # using `overwrite: true`, but ONLY when:
+      #   - the initial upload returned no artifact-id, AND
+      #   - the relevant files were actually present on disk (detect-outputs)
+      # If a file simply wasn't produced, retrying is pointless and skipped.
+      #
+      # A short sleep gives transient backend errors time to clear before
+      # the second attempt.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Pause before retry (backoff)
+        if: always() && (
+          (steps.detect-outputs.outputs.report_present  == 'true' && steps.upload-report.outputs.artifact-id  == '') ||
+          (steps.detect-outputs.outputs.traces_present  == 'true' && steps.upload-traces.outputs.artifact-id  == '') ||
+          (steps.detect-outputs.outputs.screens_present == 'true' && steps.upload-screens.outputs.artifact-id == '')
+          )
+        run: |
+          echo "::warning title=Upload retry::One or more artifact uploads returned no artifact-id despite files being present on disk. Waiting 10s before retrying."
+          sleep 10
+
+      - name: Retry — Upload Playwright HTML report
+        id: upload-report-retry
+        if: always() && steps.detect-outputs.outputs.report_present == 'true' && steps.upload-report.outputs.artifact-id == ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Retry — Upload Playwright traces
+        id: upload-traces-retry
+        if: always() && steps.detect-outputs.outputs.traces_present == 'true' && steps.upload-traces.outputs.artifact-id == ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.zip
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Retry — Upload Playwright screenshots & videos
+        id: upload-screens-retry
+        if: always() && steps.detect-outputs.outputs.screens_present == 'true' && steps.upload-screens.outputs.artifact-id == ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: |
+            test-results/**/*.png
+            test-results/**/*.jpg
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Pause before second retry (backoff)
+        if: always() && (
+          (steps.detect-outputs.outputs.report_present  == 'true' && steps.upload-report.outputs.artifact-id  == '' && steps.upload-report-retry.outputs.artifact-id  == '') ||
+          (steps.detect-outputs.outputs.traces_present  == 'true' && steps.upload-traces.outputs.artifact-id  == '' && steps.upload-traces-retry.outputs.artifact-id  == '') ||
+          (steps.detect-outputs.outputs.screens_present == 'true' && steps.upload-screens.outputs.artifact-id == '' && steps.upload-screens-retry.outputs.artifact-id == '')
+          )
+        run: |
+          echo "::warning title=Upload retry (2/2)::First retry still produced no artifact-id for one or more uploads. Waiting 20s before a final attempt."
+          sleep 20
+
+      - name: Retry 2 — Upload Playwright HTML report
+        id: upload-report-retry2
+        if: always() && steps.detect-outputs.outputs.report_present == 'true' && steps.upload-report.outputs.artifact-id == '' && steps.upload-report-retry.outputs.artifact-id == ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Retry 2 — Upload Playwright traces
+        id: upload-traces-retry2
+        if: always() && steps.detect-outputs.outputs.traces_present == 'true' && steps.upload-traces.outputs.artifact-id == '' && steps.upload-traces-retry.outputs.artifact-id == ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.zip
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Retry 2 — Upload Playwright screenshots & videos
+        id: upload-screens-retry2
+        if: always() && steps.detect-outputs.outputs.screens_present == 'true' && steps.upload-screens.outputs.artifact-id == '' && steps.upload-screens-retry.outputs.artifact-id == ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: |
+            test-results/**/*.png
+            test-results/**/*.jpg
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Summarize upload retries
+        id: retry-summary
+        if: always()
+        env:
+          R0_REPORT: ${{ steps.upload-report.outputs.artifact-id }}
+          R1_REPORT: ${{ steps.upload-report-retry.outputs.artifact-id }}
+          R2_REPORT: ${{ steps.upload-report-retry2.outputs.artifact-id }}
+          R0_TRACES: ${{ steps.upload-traces.outputs.artifact-id }}
+          R1_TRACES: ${{ steps.upload-traces-retry.outputs.artifact-id }}
+          R2_TRACES: ${{ steps.upload-traces-retry2.outputs.artifact-id }}
+          R0_SCREENS: ${{ steps.upload-screens.outputs.artifact-id }}
+          R1_SCREENS: ${{ steps.upload-screens-retry.outputs.artifact-id }}
+          R2_SCREENS: ${{ steps.upload-screens-retry2.outputs.artifact-id }}
+          PRESENT_REPORT: ${{ steps.detect-outputs.outputs.report_present }}
+          PRESENT_TRACES: ${{ steps.detect-outputs.outputs.traces_present }}
+          PRESENT_SCREENS: ${{ steps.detect-outputs.outputs.screens_present }}
+        run: |
+          set -u
+          summarize() {
+            local label="$1" present="$2" r0="$3" r1="$4" r2="$5"
+            local attempts="initial"
+            local final_id=""
+            [ -n "$r0" ] && final_id="$r0"
+            if [ -z "$final_id" ] && [ -n "$r1" ]; then attempts="initial+retry-1"; final_id="$r1"; fi
+            if [ -z "$final_id" ] && [ -n "$r2" ]; then attempts="initial+retry-1+retry-2"; final_id="$r2"; fi
+            echo "::group::Retry summary — ${label}"
+            echo "files on disk: ${present}"
+            echo "initial id:    ${r0:-<empty>}"
+            echo "retry-1 id:    ${r1:-<empty>}"
+            echo "retry-2 id:    ${r2:-<empty>}"
+            if [ -n "$final_id" ]; then
+              echo "✅ uploaded after: ${attempts} (final id=${final_id})"
+            elif [ "$present" = "true" ]; then
+              echo "::error title=Upload exhausted retries::${label} had files on disk but all 3 upload attempts returned no artifact-id."
+            else
+              echo "ℹ️ nothing produced on disk — no upload attempted/needed."
+            fi
+            echo "::endgroup::"
+          }
+          summarize "playwright-report"      "$PRESENT_REPORT"  "$R0_REPORT"  "$R1_REPORT"  "$R2_REPORT"
+          summarize "playwright-traces"      "$PRESENT_TRACES"  "$R0_TRACES"  "$R1_TRACES"  "$R2_TRACES"
+          summarize "playwright-screenshots" "$PRESENT_SCREENS" "$R0_SCREENS" "$R1_SCREENS" "$R2_SCREENS"
+
+      - name: Validate uploaded artifacts
+        id: validate-artifacts
+        if: always()
+        env:
+          # Per artifact, fall back to retry outputs if the initial upload
+          # returned no artifact-id. `||` in GitHub expressions yields the
+          # first truthy (non-empty) value, so this picks initial → retry-1 →
+          # retry-2 in order.
+          REPORT_NAME: playwright-report
+          REPORT_ID: ${{ steps.upload-report.outputs.artifact-id     || steps.upload-report-retry.outputs.artifact-id     || steps.upload-report-retry2.outputs.artifact-id }}
+          REPORT_URL: ${{ steps.upload-report.outputs.artifact-url    || steps.upload-report-retry.outputs.artifact-url    || steps.upload-report-retry2.outputs.artifact-url }}
+          REPORT_DIGEST: ${{ steps.upload-report.outputs.artifact-digest || steps.upload-report-retry.outputs.artifact-digest || steps.upload-report-retry2.outputs.artifact-digest }}
+          TRACES_NAME: playwright-traces
+          TRACES_ID: ${{ steps.upload-traces.outputs.artifact-id     || steps.upload-traces-retry.outputs.artifact-id     || steps.upload-traces-retry2.outputs.artifact-id }}
+          TRACES_URL: ${{ steps.upload-traces.outputs.artifact-url    || steps.upload-traces-retry.outputs.artifact-url    || steps.upload-traces-retry2.outputs.artifact-url }}
+          TRACES_DIGEST: ${{ steps.upload-traces.outputs.artifact-digest || steps.upload-traces-retry.outputs.artifact-digest || steps.upload-traces-retry2.outputs.artifact-digest }}
+          SCREENS_NAME: playwright-screenshots
+          SCREENS_ID: ${{ steps.upload-screens.outputs.artifact-id     || steps.upload-screens-retry.outputs.artifact-id     || steps.upload-screens-retry2.outputs.artifact-id }}
+          SCREENS_URL: ${{ steps.upload-screens.outputs.artifact-url    || steps.upload-screens-retry.outputs.artifact-url    || steps.upload-screens-retry2.outputs.artifact-url }}
+          SCREENS_DIGEST: ${{ steps.upload-screens.outputs.artifact-digest || steps.upload-screens-retry.outputs.artifact-digest || steps.upload-screens-retry2.outputs.artifact-digest }}
+
+        run: |
+          set -u
+          missing=0
+          report_present="${{ steps.detect-outputs.outputs.report_present }}"
+          traces_present="${{ steps.detect-outputs.outputs.traces_present }}"
+          screens_present="${{ steps.detect-outputs.outputs.screens_present }}"
+          echo "::group::Pre-upload disk state (from detect-outputs)"
+          echo "report_present=${report_present}"
+          echo "traces_present=${traces_present}"
+          echo "screens_present=${screens_present}"
+          echo "::endgroup::"
+          # Per-artifact status emitted as step outputs so the PR comment can
+          # render a pass/warn/fail validation summary. Values: pass | warn | fail.
+          report_one() {
+            local key="$1" label="$2" name="$3" id="$4" url="$5" digest="$6" required="$7" on_disk="$8"
+            local status="pass"
+            echo "::group::Artifact: ${label}"
+            echo "name:     ${name}"
+            echo "id:       ${id:-<none>}"
+            echo "url:      ${url:-<none>}"
+            echo "digest:   ${digest:-<none>}"
+            echo "on-disk:  ${on_disk}"
+            if [ -n "${url}" ] && [ -n "${id}" ]; then
+              echo "status: ✅ uploaded"
+            else
+              if [ "${on_disk}" = "false" ]; then
+                # Nothing was produced — distinct from an upload failure.
+                if [ "${required}" = "true" ]; then
+                  status="fail"
+                  echo "status: ❌ MISSING (required, not produced by test step)"
+                  echo "::error title=Missing artifact::${label} (${name}) was not produced"
+                  missing=$((missing + 1))
+                else
+                  status="warn"
+                  echo "status: ⚠️ not produced (optional)"
+                  echo "::warning title=Optional artifact missing::${label} (${name}) produced no files this run"
+                fi
+              else
+                # Files existed on disk but the upload step did not return an id/url.
+                status="fail"
+                echo "status: ❌ UPLOAD FAILED (files were on disk)"
+                echo "::error title=Upload failed::${label} (${name}) had files on disk but the upload step returned no artifact id"
+                [ "${required}" = "true" ] && missing=$((missing + 1))
+              fi
+            fi
+            echo "${key}_status=${status}" >> "$GITHUB_OUTPUT"
+            echo "::endgroup::"
+          }
+          report_one report   "Playwright HTML report" "$REPORT_NAME"  "$REPORT_ID"  "$REPORT_URL"  "$REPORT_DIGEST"  true  "$report_present"
+          report_one traces   "Playwright trace zips"  "$TRACES_NAME"  "$TRACES_ID"  "$TRACES_URL"  "$TRACES_DIGEST"  false "$traces_present"
+          report_one screens  "Screenshots & videos"   "$SCREENS_NAME" "$SCREENS_ID" "$SCREENS_URL" "$SCREENS_DIGEST" false "$screens_present"
+
+          # Explicitly call out the resilience case: even when the HTML report
+          # fails to generate, traces and screenshots are uploaded independently.
+          if [ "$report_present" = "false" ]; then
+            survivors=""
+            [ -n "$TRACES_URL" ]  && survivors="${survivors} traces"
+            [ -n "$SCREENS_URL" ] && survivors="${survivors} screenshots"
+            if [ -n "$survivors" ]; then
+              echo "::notice title=Report missing — debug artifacts preserved::HTML report was not generated, but the following debug artifacts were still uploaded:${survivors}"
+            fi
+          fi
+
+          if [ "$missing" -gt 0 ]; then
+            echo "overall_status=fail" >> "$GITHUB_OUTPUT"
+            echo "::error::${missing} required artifact(s) failed to upload"
+            exit 1
+          fi
+          echo "overall_status=pass" >> "$GITHUB_OUTPUT"
+          echo "All required artifacts uploaded successfully."
+
+      # Optional: publish trace zips so they can open directly in trace.playwright.dev.
+      # trace.playwright.dev fetches `?trace=<url>` from the browser — the URL must be
+      # publicly reachable (CORS-enabled). GitHub artifact URLs are auth-gated and
+      # won't work; this step uploads each zip to a public host so private repos can
+      # use one-click trace viewer links.
+      #
+      # Enable by setting the repo/org variable PUBLISH_TRACES_PUBLIC=true. By default
+      # uploads to 0x0.st (anonymous, 30-day retention). To use a custom endpoint that
+      # accepts `curl -F "file=@..."` and returns a public URL on stdout, set the repo
+      # variable TRACE_UPLOAD_ENDPOINT (e.g. your own S3-backed uploader).
+      #
+      # ⚠️ Anything uploaded becomes PUBLIC. Do not enable on workflows whose traces
+      # may contain secrets, auth tokens, PII, or internal URLs.
+      # Failure handling is configurable via repo/org variable
+      # TRACE_PUBLISH_FAILURE_MODE (default: "warn"):
+      #   warn — log warnings for failed uploads, mark them in the manifest,
+      #          and let the job continue (publishing is best-effort).
+      #   fail — exit the step non-zero on ANY upload failure (or if 0 traces
+      #          end up published when zips were present), failing the job.
+      # Any other value falls back to "warn" with a notice.
+      - name: Publish traces to trace.playwright.dev (optional)
+        id: publish-traces
+        if: always() && vars.PUBLISH_TRACES_PUBLIC == 'true'
+        env:
+          ENDPOINT: ${{ vars.TRACE_UPLOAD_ENDPOINT || 'https://0x0.st' }}
+          FAILURE_MODE: ${{ vars.TRACE_PUBLISH_FAILURE_MODE || 'warn' }}
+        run: |
+          set -u
+          mode="${FAILURE_MODE,,}"
+          case "$mode" in
+            warn|fail) ;;
+            *)
+              echo "::notice title=Unknown TRACE_PUBLISH_FAILURE_MODE::Got '${FAILURE_MODE}' — falling back to 'warn'. Valid values: warn | fail."
+              mode="warn"
+              ;;
+          esac
+          echo "Trace publish failure mode: ${mode}"
+          mkdir -p trace-links
+          links_file="trace-links/links.md"
+          : > "$links_file"
+          shopt -s globstar nullglob
+          zips=(test-results/**/*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "No trace zips to upload."
+            {
+              echo "count=0"
+              echo "failed=0"
+              echo "mode=${mode}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Uploading ${#zips[@]} trace zip(s) to ${ENDPOINT} ..."
+          count=0
+          failed=0
+          {
+            echo "| Test | Trace viewer |"
+            echo "| --- | --- |"
+          } >> "$links_file"
+          for z in "${zips[@]}"; do
+            rel="${z#test-results/}"
+            public_url=$(curl -fsS -F "file=@${z}" "${ENDPOINT}" | tr -d '\r\n' || true)
+            if [ -z "$public_url" ] || ! [[ "$public_url" =~ ^https?:// ]]; then
+              failed=$((failed + 1))
+              if [ "$mode" = "fail" ]; then
+                echo "::error title=Trace upload failed::Failed to upload ${rel} to ${ENDPOINT} (mode=fail)"
+              else
+                echo "::warning title=Trace upload failed::Failed to upload ${rel} to ${ENDPOINT} (mode=warn — continuing)"
+              fi
+              echo "| \`${rel}\` | _upload failed_ |" >> "$links_file"
+              continue
+            fi
+            encoded=$(jq -rn --arg v "$public_url" '$v|@uri')
+            viewer="https://trace.playwright.dev/?trace=${encoded}"
+            echo "  ✓ ${rel}"
+            echo "      hosted: ${public_url}"
+            echo "      viewer: ${viewer}"
+            echo "| \`${rel}\` | [Open in trace.playwright.dev](${viewer}) |" >> "$links_file"
+            count=$((count + 1))
+          done
+          {
+            echo "count=${count}"
+            echo "failed=${failed}"
+            echo "mode=${mode}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo ""
+            echo "### 🌐 Trace viewer (hosted)"
+            echo ""
+            echo "_Traces uploaded to \`${ENDPOINT}\` — these links open directly without downloading the zip._"
+            echo "_Failure mode:_ \`${mode}\` • _published: ${count}_ • _failed: ${failed}_"
+            echo ""
+            cat "$links_file"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Honor the configured failure mode.
+          if [ "$mode" = "fail" ]; then
+            if [ "$failed" -gt 0 ]; then
+              echo "::error::Trace publishing failed for ${failed} of $((count + failed)) zip(s) and TRACE_PUBLISH_FAILURE_MODE=fail — failing the job."
+              exit 1
+            fi
+            if [ "$count" -eq 0 ]; then
+              echo "::error::No traces were published (TRACE_PUBLISH_FAILURE_MODE=fail) despite ${#zips[@]} zip(s) on disk."
+              exit 1
+            fi
+          else
+            if [ "$failed" -gt 0 ]; then
+              echo "::warning title=Trace publishing partial::${failed} of $((count + failed)) trace upload(s) failed; job continues because TRACE_PUBLISH_FAILURE_MODE=warn."
+            fi
+          fi
+
+      # Build a self-contained downloads page that lists every validated artifact
+      # URL for this exact run. Published to GitHub Pages alongside the HTML
+      # report when PUBLISH_HTML_REPORT=true; otherwise still uploaded as its
+      # own artifact so it's always reachable.
+      - name: Build downloads page
+        id: downloads-page
+        if: always()
+        env:
+          REPORT_URL: ${{ steps.upload-report.outputs.artifact-url }}
+          REPORT_PREVIEW_URL: ${{ steps.report-dest.outputs.url }}
+          TRACES_URL: ${{ steps.upload-traces.outputs.artifact-url }}
+          SCREENS_URL: ${{ steps.upload-screens.outputs.artifact-url }}
+          RAW_URL: ${{ steps.upload-raw.outputs.artifact-url }}
+          RESULTS_JSON_URL: ${{ steps.upload-results-json.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -u
+          mkdir -p downloads-page
+          out=downloads-page/index.html
+          retention_days=14
+          now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          expires_iso=$(date -u -d "+${retention_days} days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                       || python3 -c "import datetime;print((datetime.datetime.utcnow()+datetime.timedelta(days=${retention_days})).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+          short_sha="${COMMIT_SHA:0:7}"
+          status_color="#16a34a"
+          [ "$JOB_STATUS" = "failure" ] && status_color="#dc2626"
+          [ "$JOB_STATUS" = "cancelled" ] && status_color="#ca8a04"
+
+          row() {
+            local label="$1" url="$2" note="$3"
+            if [ -n "$url" ]; then
+              printf '<tr><th scope="row">%s</th><td><a href="%s" rel="noopener">Download</a></td><td>%s</td></tr>\n' "$label" "$url" "$note"
+            else
+              printf '<tr><th scope="row">%s</th><td><em>not produced</em></td><td>%s</td></tr>\n' "$label" "$note"
+            fi
+          }
+
+          {
+            cat <<HTML
+          <!doctype html>
+          <html lang="en"><head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <meta name="robots" content="noindex,nofollow">
+            <title>a11y downloads — run #${GITHUB_RUN_NUMBER} (${short_sha})</title>
+            <style>
+              :root{color-scheme:light dark}
+              body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:2rem auto;padding:0 1rem;color:#111}
+              @media (prefers-color-scheme:dark){body{background:#0b0f14;color:#e6edf3}a{color:#7dd3fc}}
+              h1{font-size:1.4rem;margin:0 0 .25rem}
+              .meta{color:#6b7280;font-size:.9rem;margin-bottom:1rem}
+              .badge{display:inline-block;padding:.15rem .55rem;border-radius:999px;background:${status_color};color:#fff;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+              table{width:100%;border-collapse:collapse;margin:1rem 0}
+              th,td{text-align:left;padding:.55rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top}
+              @media (prefers-color-scheme:dark){th,td{border-color:#1f2937}}
+              th[scope=row]{font-weight:600;white-space:nowrap}
+              .note{color:#6b7280;font-size:.85rem}
+              footer{margin-top:2rem;color:#6b7280;font-size:.8rem}
+              code{background:rgba(127,127,127,.15);padding:.05rem .35rem;border-radius:4px}
+            </style>
+          </head><body>
+            <h1>♿ Accessibility downloads <span class="badge">${JOB_STATUS}</span></h1>
+            <p class="meta">
+              Run <a href="${RUN_URL}">#${GITHUB_RUN_NUMBER}</a> · attempt ${GITHUB_RUN_ATTEMPT} ·
+              commit <code>${short_sha}</code> · finished <time datetime="${now_iso}">${now_iso}</time>
+            </p>
+            <p class="note">All artifact links below are scoped to this exact run. Retention: ${retention_days} days — expires <time datetime="${expires_iso}">${expires_iso}</time>.</p>
+            <table>
+              <thead><tr><th scope="col">Artifact</th><th scope="col">Link</th><th scope="col">Notes</th></tr></thead>
+              <tbody>
+          HTML
+            row "📊 Playwright HTML report" "$REPORT_URL" "${REPORT_PREVIEW_URL:+Also live at <a href=\"${REPORT_PREVIEW_URL}\" rel=\"noopener\">${REPORT_PREVIEW_URL}</a>}"
+            row "🎞️ Trace zips" "$TRACES_URL" "Open with <code>bunx playwright show-trace path/to/trace.zip</code> or drop on <a href=\"https://trace.playwright.dev/\" rel=\"noopener\">trace.playwright.dev</a>."
+            row "🖼️ Screenshots &amp; videos" "$SCREENS_URL" "Zipped <code>.png</code> / <code>.webm</code> from <code>test-results/</code>."
+            row "🗂️ playwright-results.json" "$RESULTS_JSON_URL" "Machine-readable test outcomes."
+            row "🧪 Raw test-results dir" "$RAW_URL" "Uploaded on failure only."
+            cat <<HTML
+              </tbody>
+            </table>
+            <footer>
+              Generated by the <code>a11y</code> workflow. Re-run: <a href="${RUN_URL}?check_suite_focus=true" rel="noopener">${RUN_URL}?check_suite_focus=true</a>
+            </footer>
+          </body></html>
+          HTML
+          } > "$out"
+
+          echo "path=${out}" >> "$GITHUB_OUTPUT"
+          echo "Wrote ${out}"
+
+      - name: Upload downloads page artifact
+        id: upload-downloads-page
+        if: always() && hashFiles('downloads-page/index.html') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-downloads-page
+          path: downloads-page/index.html
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Publish downloads page to GitHub Pages
+        id: publish-downloads-page
+        if: always() && vars.PUBLISH_HTML_REPORT == 'true' && hashFiles('downloads-page/index.html') != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./downloads-page
+          publish_branch: gh-pages
+          destination_dir: ${{ steps.report-dest.outputs.dir }}/downloads
+          keep_files: true
+          commit_message: "a11y downloads page: ${{ github.workflow }} run ${{ github.run_id }}"
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute downloads page URL
+        id: downloads-url
+        if: always()
+        env:
+          REPORT_PREVIEW_URL: ${{ steps.report-dest.outputs.url }}
+          ARTIFACT_URL: ${{ steps.upload-downloads-page.outputs.artifact-url }}
+        run: |
+          if [ -n "${REPORT_PREVIEW_URL}" ] && [ "${{ steps.publish-downloads-page.outcome }}" = "success" ]; then
+            echo "url=${REPORT_PREVIEW_URL}downloads/" >> "$GITHUB_OUTPUT"
+            echo "kind=live" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=${ARTIFACT_URL}" >> "$GITHUB_OUTPUT"
+            echo "kind=artifact" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish job summary
+        if: always()
+        env:
+          REPORT_URL: ${{ steps.upload-report.outputs.artifact-url }}
+          TRACES_URL: ${{ steps.upload-traces.outputs.artifact-url }}
+          SCREENS_URL: ${{ steps.upload-screens.outputs.artifact-url }}
+          RAW_URL: ${{ steps.upload-raw.outputs.artifact-url }}
+          RESULTS_JSON_URL: ${{ steps.upload-results-json.outputs.artifact-url }}
+          # Artifact IDs let us look up each artifact's authoritative
+          # expires_at (uploaded_at + retention) from the GitHub API so the
+          # job summary shows when GitHub will actually delete each one,
+          # not just "14 days from now".
+          REPORT_ID: ${{ steps.upload-report.outputs.artifact-id  || steps.upload-report-retry.outputs.artifact-id  || steps.upload-report-retry2.outputs.artifact-id }}
+          TRACES_ID: ${{ steps.upload-traces.outputs.artifact-id  || steps.upload-traces-retry.outputs.artifact-id  || steps.upload-traces-retry2.outputs.artifact-id }}
+          SCREENS_ID: ${{ steps.upload-screens.outputs.artifact-id || steps.upload-screens-retry.outputs.artifact-id || steps.upload-screens-retry2.outputs.artifact-id }}
+          RAW_ID: ${{ steps.upload-raw.outputs.artifact-id }}
+          RESULTS_JSON_ID: ${{ steps.upload-results-json.outputs.artifact-id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+          RETENTION_DAYS: "14"
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          urlencode() { jq -rn --arg v "$1" '$v|@uri'; }
+
+          # Build an id -> expires_at lookup from the run's artifacts. If the
+          # API call fails (token scope, rate limit, etc.) we fall back to a
+          # comment-time estimate marked "approx".
+          artifacts_json=""
+          if artifacts_json=$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+              --jq '[.artifacts[] | {id: (.id|tostring), name, created_at, expires_at}]' \
+              2>/dev/null | jq -s 'add // []'); then
+            : # ok
+          else
+            artifacts_json="[]"
+            echo "::warning::Could not list run artifacts for expiry lookup — falling back to estimated expiry."
+          fi
+
+          fallback_expires=$(date -u -d "+${RETENTION_DAYS} days" +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null \
+            || python3 -c "import datetime;print((datetime.datetime.utcnow()+datetime.timedelta(days=${RETENTION_DAYS})).strftime('%Y-%m-%d %H:%M:%S UTC'))")
+
+          # Args: $1=artifact id (may be empty), $2=url (may be empty), $3=missing label
+          expires_cell() {
+            local id="$1" url="$2" missing="$3"
+            if [ -z "$url" ]; then echo "$missing"; return; fi
+            local exp_iso
+            exp_iso=$(printf '%s' "$artifacts_json" | jq -r --arg id "$id" '.[] | select(.id==$id) | .expires_at // empty' 2>/dev/null)
+            if [ -n "$exp_iso" ] && [ "$exp_iso" != "null" ]; then
+              local pretty days_left now_epoch exp_epoch
+              pretty=$(date -u -d "$exp_iso" +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$exp_iso")
+              now_epoch=$(date -u +%s)
+              exp_epoch=$(date -u -d "$exp_iso" +%s 2>/dev/null || echo "$now_epoch")
+              days_left=$(( (exp_epoch - now_epoch + 86399) / 86400 ))
+              [ "$days_left" -lt 0 ] && days_left=0
+              echo "${pretty} (in ${days_left}d)"
+            else
+              # GitHub did not return expires_at for this artifact id. Surface
+              # the computed fallback timestamp AND the reason inline so the
+              # row is self-explanatory.
+              local reason="GitHub API returned no \`expires_at\` for artifact id \`${id:-unknown}\`; estimated from upload time + ${RETENTION_DAYS}d retention"
+              echo "${fallback_expires} _(approx: ${reason})_"
+            fi
+          }
+
+          # Stand-alone "Days left" cell for the summary table. Source of truth
+          # is GitHub's expires_at; falls back to the retention window and is
+          # labelled _approx_ when the API didn't return a value. Emits a 🟢/🟡/🔴
+          # marker so the row is easy to scan.
+          days_left_cell() {
+            local id="$1" url="$2" missing="$3"
+            if [ -z "$url" ]; then echo "$missing"; return; fi
+            local exp_iso approx=""
+            exp_iso=$(printf '%s' "$artifacts_json" | jq -r --arg id "$id" '.[] | select(.id==$id) | .expires_at // empty' 2>/dev/null)
+            if [ -z "$exp_iso" ] || [ "$exp_iso" = "null" ]; then
+              exp_iso=$(date -u -d "+${RETENTION_DAYS} days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                || python3 -c "import datetime;print((datetime.datetime.utcnow()+datetime.timedelta(days=${RETENTION_DAYS})).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+              approx=" _(approx)_"
+            fi
+            local now_epoch exp_epoch days_left hours_left icon
+            now_epoch=$(date -u +%s)
+            exp_epoch=$(date -u -d "$exp_iso" +%s 2>/dev/null || echo "$now_epoch")
+            local delta=$(( exp_epoch - now_epoch ))
+            [ "$delta" -lt 0 ] && delta=0
+            days_left=$(( delta / 86400 ))
+            hours_left=$(( (delta % 86400) / 3600 ))
+            if   [ "$delta" -le 0 ];           then icon="⚫"; echo "${icon} expired${approx}"; return
+            elif [ "$days_left" -le 1 ];       then icon="🔴"
+            elif [ "$days_left" -le 5 ];       then icon="🟡"
+            else                                    icon="🟢"
+            fi
+            if [ "$days_left" -lt 1 ]; then
+              echo "${icon} ${hours_left}h left${approx}"
+            else
+              echo "${icon} ${days_left}d ${hours_left}h left${approx}"
+            fi
+          }
+
+
+          # Per-artifact "Open in your timezone" link via timeanddate.com's
+          # fixedtime page (GitHub markdown can't run JS to detect the
+          # viewer's tz directly).
+          #
+          # Fallback policy:
+          #   - If the GitHub API returned `expires_at`, always surface the
+          #     UTC timestamp itself so the row is never blank — even when
+          #     the viewer link can't be built (timestamp unparseable, date
+          #     binary missing, etc.). The reason is shown inline.
+          #   - If the API returned no value, we fall back to
+          #     "now + retention" and label the row _approx_ with the reason.
+          local_cell() {
+            local id="$1" url="$2" missing="$3"
+            if [ -z "$url" ]; then echo "$missing"; return; fi
+            local exp_iso source="api" reason=""
+            exp_iso=$(printf '%s' "$artifacts_json" | jq -r --arg id "$id" '.[] | select(.id==$id) | .expires_at // empty' 2>/dev/null)
+            if [ -z "$exp_iso" ] || [ "$exp_iso" = "null" ]; then
+              exp_iso=$(date -u -d "+${RETENTION_DAYS} days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                || python3 -c "import datetime;print((datetime.datetime.utcnow()+datetime.timedelta(days=${RETENTION_DAYS})).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+              source="approx"
+              reason="GitHub API did not return \`expires_at\`; estimated from upload time + ${RETENTION_DAYS}d retention"
+            fi
+            # Human-readable UTC timestamp for inline display, regardless of
+            # whether we can build the viewer link below.
+            local pretty
+            pretty=$(date -u -d "$exp_iso" +"%Y-%m-%d %H:%M UTC" 2>/dev/null \
+              || python3 -c "import datetime;print(datetime.datetime.strptime('${exp_iso}'.replace('Z','+0000'), '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d %H:%M UTC'))" 2>/dev/null \
+              || echo "$exp_iso")
+            # Compact YYYYMMDDTHHMM in UTC for the ?iso= param.
+            local compact
+            compact=$(date -u -d "$exp_iso" +"%Y%m%dT%H%M" 2>/dev/null \
+              || python3 -c "import datetime;print(datetime.datetime.strptime('${exp_iso}'.replace('Z','+0000'), '%Y-%m-%dT%H:%M:%S%z').strftime('%Y%m%dT%H%M'))" 2>/dev/null \
+              || echo "")
+            local approx_tag=""
+            if [ "$source" = "approx" ]; then approx_tag=" _(approx: ${reason})_"; fi
+            if [ -z "$compact" ]; then
+              # Viewer link unavailable — still show the UTC timestamp + reason.
+              echo "⚠️ \`${pretty}\` _(viewer link unavailable: could not parse \`${exp_iso}\` into the timeanddate.com \`?iso=\` format)_${approx_tag}"
+              return
+            fi
+            local msg="A11y%20artifact%20expires"
+            echo "[Open \`${pretty}\` in your timezone ↗](https://www.timeanddate.com/worldclock/fixedtime.html?iso=${compact}&msg=${msg})${approx_tag}"
+          }
+
+
+          report_exp=$(expires_cell  "${REPORT_ID}"       "${REPORT_URL}"       "_not produced_")
+          traces_exp=$(expires_cell  "${TRACES_ID}"       "${TRACES_URL}"       "_none_")
+          screens_exp=$(expires_cell "${SCREENS_ID}"      "${SCREENS_URL}"      "_none_")
+          results_exp=$(expires_cell "${RESULTS_JSON_ID}" "${RESULTS_JSON_URL}" "_not produced_")
+          raw_exp=$(expires_cell     "${RAW_ID}"          "${RAW_URL}"          "_only on failure_")
+
+          report_local=$(local_cell  "${REPORT_ID}"       "${REPORT_URL}"       "_not produced_")
+          traces_local=$(local_cell  "${TRACES_ID}"       "${TRACES_URL}"       "_none_")
+          screens_local=$(local_cell "${SCREENS_ID}"      "${SCREENS_URL}"      "_none_")
+          results_local=$(local_cell "${RESULTS_JSON_ID}" "${RESULTS_JSON_URL}" "_not produced_")
+          raw_local=$(local_cell     "${RAW_ID}"          "${RAW_URL}"          "_only on failure_")
+
+          report_days=$(days_left_cell  "${REPORT_ID}"       "${REPORT_URL}"       "_not produced_")
+          traces_days=$(days_left_cell  "${TRACES_ID}"       "${TRACES_URL}"       "_none_")
+          screens_days=$(days_left_cell "${SCREENS_ID}"      "${SCREENS_URL}"      "_none_")
+          results_days=$(days_left_cell "${RESULTS_JSON_ID}" "${RESULTS_JSON_URL}" "_not produced_")
+          raw_days=$(days_left_cell     "${RAW_ID}"          "${RAW_URL}"          "_only on failure_")
+
+          {
+            echo "## ♿ Accessibility tests — ${JOB_STATUS}"
+            echo ""
+            echo "Run: [#${GITHUB_RUN_NUMBER}](${RUN_URL})  •  Commit: \`${GITHUB_SHA::7}\`  •  Ref: \`${GITHUB_REF_NAME}\`"
+            echo ""
+            echo "### Results"
+            echo ""
+            if [ -f playwright-results.json ]; then
+              metrics=$(jq -r '
+                def fmt_ms(ms): if ms >= 60000 then "\((ms/60000)|floor)m \(((ms%60000)/1000)|floor)s"
+                                elif ms >= 1000 then "\((ms/1000*10|floor)/10)s"
+                                else "\(ms|floor)ms" end;
+                [.suites | .. | .tests? // empty | .[] | .results[]?] as $r
+                | {
+                    passed:  ($r | map(select(.status=="passed"))  | length),
+                    failed:  ($r | map(select(.status=="failed"))  | length),
+                    timedOut:($r | map(select(.status=="timedOut"))| length),
+                    skipped: ($r | map(select(.status=="skipped")) | length),
+                    flaky:   ($r | map(select(.status=="flaky"))   | length),
+                    total:   ($r | length),
+                    duration: (.stats.duration // ([$r[].duration // 0] | add))
+                  }
+                | "| ✅ Passed | ❌ Failed | ⏱️ Timed out | ⏭️ Skipped | 🔁 Flaky | 📦 Total | ⏲️ Duration |\n| --- | --- | --- | --- | --- | --- | --- |\n| \(.passed) | \(.failed) | \(.timedOut) | \(.skipped) | \(.flaky) | \(.total) | \(fmt_ms(.duration)) |"
+              ' playwright-results.json 2>/dev/null || echo "")
+              if [ -n "$metrics" ]; then echo "$metrics"; else echo "_Could not parse \`playwright-results.json\`._"; fi
+            else
+              echo "_No \`playwright-results.json\` produced._"
+            fi
+            echo ""
+            echo "### Artifacts"
+            echo ""
+            echo "> **Retention:** ${RETENTION_DAYS} days. **Expires (UTC)** is GitHub's authoritative \`expires_at\` for that artifact (upload time + retention); rows marked _approx_ fell back to an estimate. **Days left** is computed from the same \`expires_at\` (🟢 >5d • 🟡 ≤5d • 🔴 ≤1d • ⚫ expired). **Expires (local)** opens timeanddate.com's fixed-time page so the same instant is rendered in your browser's timezone. **Details** opens the artifact's page on GitHub Actions (size, digest, download history)."
+            echo ""
+            # Per-artifact "View details" link → GitHub Actions artifact page.
+            # URL shape: /<owner>/<repo>/actions/runs/<run_id>/artifacts/<artifact_id>
+            details() {
+              local id="$1"
+              if [ -z "$id" ]; then echo "—"; return; fi
+              echo "[View details](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/${id})"
+            }
+            report_details=$(details   "${REPORT_ID}")
+            traces_details=$(details   "${TRACES_ID}")
+            screens_details=$(details  "${SCREENS_ID}")
+            results_details=$(details  "${RESULTS_JSON_ID}")
+            raw_details=$(details      "${RAW_ID}")
+            echo "| Artifact | Link | Details | Expires (UTC) | Days left | Expires (local) |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            echo "| 📊 Playwright HTML report   | ${REPORT_URL:+[Download](${REPORT_URL})}${REPORT_URL:-_not produced_} | ${report_details} | ${report_exp} | ${report_days} | ${report_local} |"
+            echo "| 🎞️ Trace zips (bundle)      | ${TRACES_URL:+[Download](${TRACES_URL})}${TRACES_URL:-_none_} | ${traces_details} | ${traces_exp} | ${traces_days} | ${traces_local} |"
+            echo "| 🖼️ Screenshots & videos     | ${SCREENS_URL:+[Download](${SCREENS_URL})}${SCREENS_URL:-_none_} | ${screens_details} | ${screens_exp} | ${screens_days} | ${screens_local} |"
+            echo "| 🗂️ \`playwright-results.json\` | ${RESULTS_JSON_URL:+[Download](${RESULTS_JSON_URL})}${RESULTS_JSON_URL:-_not produced_} | ${results_details} | ${results_exp} | ${results_days} | ${results_local} |"
+            echo "| 🧪 Raw test-results dir     | ${RAW_URL:+[Download](${RAW_URL})}${RAW_URL:-_only uploaded on failure_} | ${raw_details} | ${raw_exp} | ${raw_days} | ${raw_local} |"
+            echo ""
+
+            echo "### 🔎 Trace viewer permalinks"
+            echo ""
+            if [ -d test-results ] && compgen -G "test-results/**/*.zip" > /dev/null; then
+              echo "| Test | Open in trace.playwright.dev |"
+              echo "| --- | --- |"
+              while IFS= read -r trace; do
+                rel="${trace#test-results/}"
+                encoded=$(urlencode "$trace")
+                # trace.playwright.dev?trace=<URL> opens a trace fetched from a public URL.
+                # GitHub artifact URLs require auth, so the prefilled link works only when
+                # the bundle is downloaded and re-hosted (e.g. unzipped to a public bucket).
+                echo "| \`${rel}\` | [Open viewer](https://trace.playwright.dev/?trace=${encoded}) |"
+              done < <(find test-results -name '*.zip' | sort)
+              echo ""
+              echo "> GitHub artifact URLs are auth-gated, so the prefilled \`?trace=\` links work only for publicly hosted traces. For private repos: download the bundle above and drag the \`.zip\` onto <https://trace.playwright.dev/>, or run \`bunx playwright show-trace path/to/trace.zip\` locally."
+            else
+              echo "_No trace zips were produced this run._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Verifies that every uploaded artifact has a GitHub-reported expires_at
+      # value, and logs the artifact name, URL, and computed expiration side by
+      # side. Fails the job if any uploaded artifact is missing an expiration —
+      # that means GitHub never registered a retention window, which would
+      # break the PR comment / job summary expiry columns.
+      - name: Verify artifact expirations
+        if: always()
+        env:
+          REPORT_URL: ${{ steps.upload-report.outputs.artifact-url }}
+          TRACES_URL: ${{ steps.upload-traces.outputs.artifact-url }}
+          SCREENS_URL: ${{ steps.upload-screens.outputs.artifact-url }}
+          RAW_URL: ${{ steps.upload-raw.outputs.artifact-url }}
+          RESULTS_JSON_URL: ${{ steps.upload-results-json.outputs.artifact-url }}
+          DOWNLOADS_URL: ${{ steps.upload-downloads-page.outputs.artifact-url }}
+          REPORT_ID: ${{ steps.upload-report.outputs.artifact-id  || steps.upload-report-retry.outputs.artifact-id  || steps.upload-report-retry2.outputs.artifact-id }}
+          TRACES_ID: ${{ steps.upload-traces.outputs.artifact-id  || steps.upload-traces-retry.outputs.artifact-id  || steps.upload-traces-retry2.outputs.artifact-id }}
+          SCREENS_ID: ${{ steps.upload-screens.outputs.artifact-id || steps.upload-screens-retry.outputs.artifact-id || steps.upload-screens-retry2.outputs.artifact-id }}
+          RAW_ID: ${{ steps.upload-raw.outputs.artifact-id }}
+          RESULTS_JSON_ID: ${{ steps.upload-results-json.outputs.artifact-id }}
+          DOWNLOADS_ID: ${{ steps.upload-downloads-page.outputs.artifact-id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          echo "::group::Fetch run artifact metadata"
+          if ! artifacts_json=$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+              --jq '[.artifacts[] | {id: (.id|tostring), name, created_at, expires_at, archive_download_url}]' \
+              2>/dev/null | jq -s 'add // []'); then
+            echo "::error title=Artifact metadata lookup failed::Could not list artifacts for run ${GITHUB_RUN_ID} — cannot verify expirations."
+            exit 1
+          fi
+          echo "Found $(printf '%s' "$artifacts_json" | jq 'length') artifact(s) on this run."
+          echo "::endgroup::"
+
+          missing=0
+          checked=0
+
+          # rows: "Label|ID|URL"
+          rows=(
+            "Playwright HTML report|${REPORT_ID}|${REPORT_URL}"
+            "Trace zips|${TRACES_ID}|${TRACES_URL}"
+            "Screenshots & videos|${SCREENS_ID}|${SCREENS_URL}"
+            "playwright-results.json|${RESULTS_JSON_ID}|${RESULTS_JSON_URL}"
+            "Raw test-results dir|${RAW_ID}|${RAW_URL}"
+            "Downloads page|${DOWNLOADS_ID}|${DOWNLOADS_URL}"
+          )
+
+          {
+            echo ""
+            echo "### 🕒 Artifact expiration verification"
+            echo ""
+            echo "| Artifact | Name | URL | Expires (UTC) | Status |"
+            echo "| --- | --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for row in "${rows[@]}"; do
+            label="${row%%|*}"
+            rest="${row#*|}"
+            id="${rest%%|*}"
+            url="${rest#*|}"
+
+            if [ -z "$id" ] && [ -z "$url" ]; then
+              echo "::group::${label}"
+              echo "  (not uploaded this run — skipping)"
+              echo "::endgroup::"
+              echo "| ${label} | _not uploaded_ | — | — | ⏭️ skipped |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            checked=$((checked + 1))
+            meta=$(printf '%s' "$artifacts_json" | jq -c --arg id "$id" '.[] | select(.id==$id)')
+            name=$(printf '%s' "$meta" | jq -r '.name // ""')
+            exp_iso=$(printf '%s' "$meta" | jq -r '.expires_at // ""')
+            created_iso=$(printf '%s' "$meta" | jq -r '.created_at // ""')
+
+            echo "::group::${label}"
+            echo "  name:       ${name:-<unknown>}"
+            echo "  artifact id: ${id:-<none>}"
+            echo "  url:        ${url:-<none>}"
+            echo "  uploaded:   ${created_iso:-<unknown>}"
+            echo "  expires:    ${exp_iso:-<MISSING>}"
+
+            if [ -z "$exp_iso" ] || [ "$exp_iso" = "null" ]; then
+              echo "::error title=Missing expiration::${label} (id=${id:-?}, name=${name:-?}) has no expires_at from the GitHub API."
+              echo "| ${label} | \`${name:-?}\` | ${url:+[link](${url})}${url:-—} | _MISSING_ | ❌ fail |" >> "$GITHUB_STEP_SUMMARY"
+              missing=$((missing + 1))
+            else
+              pretty=$(date -u -d "$exp_iso" +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$exp_iso")
+              now_epoch=$(date -u +%s)
+              exp_epoch=$(date -u -d "$exp_iso" +%s 2>/dev/null || echo "$now_epoch")
+              days_left=$(( (exp_epoch - now_epoch + 86399) / 86400 ))
+              [ "$days_left" -lt 0 ] && days_left=0
+              echo "  pretty:     ${pretty} (in ${days_left}d)"
+              echo "| ${label} | \`${name}\` | ${url:+[link](${url})}${url:-—} | ${pretty} (in ${days_left}d) | ✅ ok |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "Verified ${checked} uploaded artifact(s); ${missing} missing expiration."
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::${missing} uploaded artifact(s) have no expires_at — failing the job."
+            exit 1
+          fi
+
+      - name: Comment artifact links on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          REPORT_URL: ${{ steps.upload-report.outputs.artifact-url }}
+          REPORT_PREVIEW_URL: ${{ steps.report-dest.outputs.url_latest }}
+          REPORT_PREVIEW_URL_RUN: ${{ steps.report-dest.outputs.url_run }}
+          TRACES_URL: ${{ steps.upload-traces.outputs.artifact-url }}
+          SCREENS_URL: ${{ steps.upload-screens.outputs.artifact-url }}
+          RAW_URL: ${{ steps.upload-raw.outputs.artifact-url }}
+          RESULTS_JSON_URL: ${{ steps.upload-results-json.outputs.artifact-url }}
+          # Artifact IDs — used to look up each artifact's actual upload time
+          # (created_at) and authoritative expires_at from the GitHub API, so the
+          # "Expires" column reflects when GitHub will delete it rather than when
+          # the PR comment was posted. Fall back through retry attempts.
+          REPORT_ID: ${{ steps.upload-report.outputs.artifact-id  || steps.upload-report-retry.outputs.artifact-id  || steps.upload-report-retry2.outputs.artifact-id }}
+          TRACES_ID: ${{ steps.upload-traces.outputs.artifact-id  || steps.upload-traces-retry.outputs.artifact-id  || steps.upload-traces-retry2.outputs.artifact-id }}
+          SCREENS_ID: ${{ steps.upload-screens.outputs.artifact-id || steps.upload-screens-retry.outputs.artifact-id || steps.upload-screens-retry2.outputs.artifact-id }}
+          RAW_ID: ${{ steps.upload-raw.outputs.artifact-id }}
+          RESULTS_JSON_ID: ${{ steps.upload-results-json.outputs.artifact-id }}
+
+          DOWNLOADS_URL: ${{ steps.downloads-url.outputs.url }}
+          DOWNLOADS_KIND: ${{ steps.downloads-url.outputs.kind }}
+          VALIDATION_REPORT: ${{ steps.validate-artifacts.outputs.report_status }}
+          VALIDATION_TRACES: ${{ steps.validate-artifacts.outputs.traces_status }}
+          VALIDATION_SCREENS: ${{ steps.validate-artifacts.outputs.screens_status }}
+          VALIDATION_OVERALL: ${{ steps.validate-artifacts.outputs.overall_status }}
+          JOB_STATUS: ${{ job.status }}
+          # Trace.playwright.dev publishing (opt-in via vars.PUBLISH_TRACES_PUBLIC)
+          PUBLISH_TRACES_ENABLED: ${{ vars.PUBLISH_TRACES_PUBLIC == 'true' && 'true' || 'false' }}
+          PUBLISH_TRACES_COUNT: ${{ steps.publish-traces.outputs.count }}
+          PUBLISH_TRACES_ENDPOINT: ${{ vars.TRACE_UPLOAD_ENDPOINT || 'https://0x0.st' }}
+
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const marker = '<!-- a11y-artifacts-comment -->';
+            const { REPORT_URL, REPORT_PREVIEW_URL, REPORT_PREVIEW_URL_RUN, TRACES_URL, SCREENS_URL, RAW_URL, RESULTS_JSON_URL, DOWNLOADS_URL, DOWNLOADS_KIND, VALIDATION_REPORT, VALIDATION_TRACES, VALIDATION_SCREENS, VALIDATION_OVERALL, JOB_STATUS, PUBLISH_TRACES_ENABLED, PUBLISH_TRACES_COUNT, PUBLISH_TRACES_ENDPOINT, REPORT_ID, TRACES_ID, SCREENS_ID, RAW_ID, RESULTS_JSON_ID } = process.env;
+            const vIcon = (s) => s === 'pass' ? '✅ pass' : s === 'warn' ? '⚠️ warn' : s === 'fail' ? '❌ fail' : '— n/a';
+            const vNote = (s, required) => s === 'pass' ? 'uploaded with id + URL' : s === 'warn' ? 'optional — no matching files this run' : s === 'fail' ? `${required ? 'required ' : ''}artifact missing — job failed` : 'validation step did not run';
+            const link = (url, fallback) => url ? `[Download](${url})` : fallback;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const rerunUrl = `${runUrl}?check_suite_focus=true`;
+            const statusIcon = JOB_STATUS === 'success' ? '✅' : JOB_STATUS === 'failure' ? '❌' : '⚠️';
+            const badgeColor = JOB_STATUS === 'success' ? 'brightgreen' : JOB_STATUS === 'failure' ? 'red' : 'yellow';
+            const statusBadge = `https://img.shields.io/badge/a11y-${encodeURIComponent(JOB_STATUS)}-${badgeColor}?logo=githubactions&logoColor=white`;
+            const rerunBadge = `https://img.shields.io/badge/%E2%9F%B3%20re--run-workflow-blue?logo=githubactions&logoColor=white`;
+            const shortSha = context.sha.slice(0, 7);
+            const commitUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${context.sha}`;
+            const now = new Date();
+            const stamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+            const retentionDays = 14;
+
+            // Fetch authoritative upload time + expiry per artifact from the
+            // GitHub API. `expires_at` reflects when GitHub will actually delete
+            // the artifact (uploaded_at + retention), not when this comment was
+            // posted — so re-runs that reuse uploads or delayed posting show the
+            // correct expiry. If the lookup fails, fall back to a comment-time
+            // estimate and mark it as approximate.
+            const artifactMetaById = new Map();
+            try {
+              const all = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              });
+              for (const a of all) artifactMetaById.set(String(a.id), a);
+            } catch (e) {
+              core.warning(`Could not list run artifacts for expiry lookup: ${e.message}`);
+            }
+
+            const fmtUtc = (d) => d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+            const fallbackExpires = new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000);
+            // Overall retention banner — uses earliest known artifact expiry if
+            // available, otherwise the comment-time estimate.
+            const knownExpiries = [...artifactMetaById.values()]
+              .map(a => a.expires_at ? new Date(a.expires_at) : null)
+              .filter(d => d && !isNaN(d));
+            const overallExpires = knownExpiries.length
+              ? new Date(Math.min(...knownExpiries.map(d => d.getTime())))
+              : fallbackExpires;
+            const expiresRel = `<abbr title="${overallExpires.toISOString()}">${fmtUtc(overallExpires)}</abbr>${knownExpiries.length ? '' : ' _(approx)_'}`;
+
+            const expiresCell = (url, id) => {
+              if (!url) return '—';
+              const meta = id ? artifactMetaById.get(String(id)) : null;
+              if (meta && meta.expires_at) {
+                const exp = new Date(meta.expires_at);
+                const uploaded = meta.created_at ? new Date(meta.created_at) : null;
+                const daysLeft = Math.max(0, Math.ceil((exp.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+                const uploadedNote = uploaded ? ` _(uploaded ${fmtUtc(uploaded)})_` : '';
+                return `<abbr title="${exp.toISOString()}">${fmtUtc(exp)}</abbr> _(in ${daysLeft}d)_${uploadedNote}`;
+              }
+              // Fallback: artifact lookup failed — estimate from comment time.
+              return `${fmtUtc(fallbackExpires)} _(approx, in ~${retentionDays}d)_`;
+            };
+
+            // GitHub markdown comments are static HTML — there's no JS to read
+            // the viewer's timezone. Render a link to timeanddate.com's
+            // fixedtime page, which converts the given UTC instant into the
+            // visitor's local timezone on open.
+            const tzLink = (d, label) => {
+              const iso = d.toISOString();
+              // YYYYMMDDTHHMM (UTC) for timeanddate.com ?iso= param
+              const compact = iso.replace(/[-:]/g, '').slice(0, 13);
+              const msg = encodeURIComponent(label || 'Artifact expires');
+              return `https://www.timeanddate.com/worldclock/fixedtime.html?iso=${compact}&msg=${msg}`;
+            };
+            const expiresLocalCell = (url, id) => {
+              if (!url) return '—';
+              const meta = id ? artifactMetaById.get(String(id)) : null;
+              const exp = meta && meta.expires_at ? new Date(meta.expires_at) : fallbackExpires;
+              const approx = meta && meta.expires_at ? '' : ' _(approx)_';
+              return `[Open in your timezone ↗](${tzLink(exp, 'A11y artifact expires')})${approx}`;
+            };
+
+
+
+            // Collect per-test trace viewer permalinks for this exact run.
+            // Hosted links (from publish-traces step) open directly; artifact-based
+            // links require downloading the zip first but are scoped to this run.
+            const tracesEnabled = PUBLISH_TRACES_ENABLED === 'true';
+            const tracesCount = Number.parseInt(PUBLISH_TRACES_COUNT || '0', 10) || 0;
+            let hostedTraceBanner = '';
+            let hostedTraceTable = '';
+            try {
+              const hosted = fs.readFileSync('trace-links/links.md', 'utf8').trim();
+              if (hosted && tracesCount > 0) {
+                hostedTraceBanner = `### 🌐 Trace viewer — one-click (${tracesCount} trace${tracesCount === 1 ? '' : 's'})\n\n${tracesCount} trace${tracesCount === 1 ? ' was' : 's were'} published to \`${PUBLISH_TRACES_ENDPOINT}\` and prefilled into [trace.playwright.dev](https://trace.playwright.dev/). The links below open the viewer directly — **no download, no auth wall**.\n`;
+                hostedTraceTable = `\n#### 🌐 trace.playwright.dev viewer URLs (this run)\n\n${hosted}\n`;
+              } else if (tracesEnabled) {
+                hostedTraceBanner = `> 🌐 Trace publishing is **enabled** (\`PUBLISH_TRACES_PUBLIC=true\`) but no traces were produced this run — nothing to publish to [trace.playwright.dev](https://trace.playwright.dev/).\n`;
+              } else {
+                hostedTraceBanner = `> 💡 One-click trace viewer URLs are disabled. Set repo variable \`PUBLISH_TRACES_PUBLIC=true\` to upload trace zips to a public host and surface prefilled [trace.playwright.dev](https://trace.playwright.dev/) links here. _Anything uploaded becomes public — do not enable on workflows whose traces contain secrets, tokens, or PII._\n`;
+              }
+            } catch {
+              if (tracesEnabled) {
+                hostedTraceBanner = `> ⚠️ Trace publishing is enabled but the link manifest (\`trace-links/links.md\`) was not produced — check the **Publish traces to trace.playwright.dev** step logs.\n`;
+              }
+            }
+
+
+            let artifactTraceTable = '';
+            try {
+              const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => {
+                const p = path.join(dir, d.name);
+                return d.isDirectory() ? walk(p) : [p];
+              });
+              const zips = fs.existsSync('test-results')
+                ? walk('test-results').filter(f => f.endsWith('.zip')).sort()
+                : [];
+              if (zips.length && TRACES_URL) {
+                const rows = zips.map(z => {
+                  const rel = z.replace(/^test-results\//, '');
+                  return `| \`${rel}\` | [Download zip](${TRACES_URL}) → drag onto [trace.playwright.dev](https://trace.playwright.dev/) |`;
+                }).join('\n');
+                artifactTraceTable = `\n#### 🔎 Trace viewer permalinks (from this run's artifact)\n\n| Test | Open in viewer |\n| --- | --- |\n${rows}\n\n_GitHub artifact URLs are auth-gated, so \`?trace=\` prefilling doesn't work. Download the bundle above (this run only), then drop the \`.zip\` on trace.playwright.dev — or run \`bunx playwright show-trace path/to/trace.zip\`._\n`;
+              }
+            } catch {}
+
+            const body = [
+              marker,
+              `## ${statusIcon} Accessibility tests — \`${JOB_STATUS}\``,
+              '',
+              `[![status](${statusBadge})](${runUrl}) [![re-run](${rerunBadge})](${rerunUrl})`,
+              '',
+              `**Latest run:** [#${context.runNumber}](${runUrl}) • **Commit:** [\`${shortSha}\`](${commitUrl}) • **Attempt:** ${context.runAttempt} • **Finished:** ${stamp}`,
+              '',
+              REPORT_PREVIEW_URL
+                ? `### 🌐 Live HTML report preview\n\n**[${REPORT_PREVIEW_URL}](${REPORT_PREVIEW_URL})** — stable URL for this PR; always points to the **latest** run. Safe to bookmark or paste in the PR description.${REPORT_PREVIEW_URL_RUN ? `\n\n_Immutable snapshot of this run:_ [${REPORT_PREVIEW_URL_RUN}](${REPORT_PREVIEW_URL_RUN})` : ''}\n`
+                : `> 💡 Live HTML report previews are disabled. Set repo variable \`PUBLISH_HTML_REPORT=true\` and enable GitHub Pages (branch \`gh-pages\`) to get a one-click report URL here.\n`,
+              '',
+              hostedTraceBanner,
+              '',
+              DOWNLOADS_URL
+                ? `### 📥 Downloads page\n\n**[Open the downloads page →](${DOWNLOADS_URL})** — lightweight HTML index of every validated artifact for this run${DOWNLOADS_KIND === 'live' ? ' (live, no expiry)' : ' (artifact, expires in 14d)'}.\n`
+                : '',
+
+              '',
+              `### 🧾 Artifact validation`,
+              '',
+              `**Overall:** ${VALIDATION_OVERALL === 'pass' ? '✅ all required artifacts uploaded' : VALIDATION_OVERALL === 'fail' ? '❌ required artifact missing' : '— validation did not run'}`,
+              '',
+              `| Artifact | Required | Status | Notes |`,
+              '| --- | --- | --- | --- |',
+              `| 📊 Playwright HTML report | yes | ${vIcon(VALIDATION_REPORT)} | ${vNote(VALIDATION_REPORT, true)} |`,
+              `| 🎞️ Trace zips | no | ${vIcon(VALIDATION_TRACES)} | ${vNote(VALIDATION_TRACES, false)} |`,
+              `| 🖼️ Screenshots & videos | no | ${vIcon(VALIDATION_SCREENS)} | ${vNote(VALIDATION_SCREENS, false)} |`,
+              '',
+              `> The artifacts below come from run [#${context.runNumber}, attempt ${context.runAttempt}](${runUrl}) at commit \`${shortSha}\`. Pushing a new commit or clicking **re-run** above replaces this comment with fresh links.`,
+              `> **Retention:** ${retentionDays} days — earliest artifact below expires ${expiresRel}. Each row shows its own GitHub-reported expiry based on actual upload time.`,
+              '',
+              `### Direct links (run #${context.runNumber}, attempt ${context.runAttempt})`,
+              '',
+              `| Artifact | Link | Expires (UTC) | Expires (local) |`,
+              '| --- | --- | --- | --- |',
+              `| 📊 Playwright HTML report | ${link(REPORT_URL, '_not produced_')}${REPORT_PREVIEW_URL ? ` • [Open live](${REPORT_PREVIEW_URL})` : ''} | ${expiresCell(REPORT_URL, REPORT_ID)}${REPORT_PREVIEW_URL ? ' _(live URL: no expiry)_' : ''} | ${expiresLocalCell(REPORT_URL, REPORT_ID)} |`,
+              `| 🎞️ Trace zips | ${link(TRACES_URL, '_none_')} | ${expiresCell(TRACES_URL, TRACES_ID)} | ${expiresLocalCell(TRACES_URL, TRACES_ID)} |`,
+              `| 🖼️ Screenshots & videos (zip) | ${link(SCREENS_URL, '_none_')} | ${expiresCell(SCREENS_URL, SCREENS_ID)} | ${expiresLocalCell(SCREENS_URL, SCREENS_ID)} |`,
+              `| 🗂️ \`playwright-results.json\` | ${link(RESULTS_JSON_URL, '_not produced_')} | ${expiresCell(RESULTS_JSON_URL, RESULTS_JSON_ID)} | ${expiresLocalCell(RESULTS_JSON_URL, RESULTS_JSON_ID)} |`,
+              `| 🧪 Raw test-results dir | ${link(RAW_URL, '_only on failure_')} | ${expiresCell(RAW_URL, RAW_ID)} | ${expiresLocalCell(RAW_URL, RAW_ID)} |`,
+
+
+              hostedTraceTable,
+              artifactTraceTable,
+              '',
+              `To re-run just this workflow: open the [run page](${rerunUrl}) → **Re-run jobs** → **Re-run failed jobs** (or **Re-run all jobs**).`,
+              '> Open a trace locally with: `bunx playwright show-trace path/to/trace.zip`',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

@@ -1,0 +1,199 @@
+name: Print modal zoom / DPI (cross-browser)
+
+# Runs the print-modal zoom/DPR auto-fit specs across all three
+# Playwright engines to catch browser-specific rendering differences:
+#   - Chromium: reference engine used by the PR-blocking workflows
+#   - Firefox (Gecko): different CSS `zoom` + layout pipeline; catches
+#     Gecko-only reflow / IntersectionObserver quirks
+#   - WebKit (Safari): different devicePixelRatio + subpixel rounding;
+#     catches iOS/Safari-only fit drift not visible in Chromium
+#
+# Specs executed:
+#   - tests/a11y/print-modal-zoom-dpi.spec.ts
+#     (portrait mobile 390×844, zoom {0.9, 1.25} × DPR {2, 3})
+#   - tests/a11y/print-modal-zoom-dpi-landscape-desktop.spec.ts
+#     (landscape mobile 844×390 + desktop 1440×900, same axes)
+#
+# WebKit/Firefox binaries are not bundled in the local sandbox, so this
+# workflow is CI-only. Each browser runs as an independent matrix leg
+# so a failure name tells you which engine regressed without opening
+# the report. Runs on PR (paths-filtered) and nightly on main.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/a11y/print-modal-zoom-dpi.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-landscape-desktop.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts-snapshots/**"
+      - "tests/a11y/print-modal-zoom-dpi-layout-metrics.spec.ts"
+      - "src/components/PrintPreviewModal.tsx"
+      - "src/routes/test-print-modal.tsx"
+      - "src/lib/letterhead*"
+      - "src/lib/printFlow*"
+      - "src/lib/paperPresets*"
+      - "src/lib/logos*"
+      - "playwright.config.ts"
+      - ".github/workflows/print-modal-zoom-dpi-cross-browser.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/a11y/print-modal-zoom-dpi.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-landscape-desktop.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts"
+      - "tests/a11y/print-modal-zoom-dpi-visual.spec.ts-snapshots/**"
+      - "tests/a11y/print-modal-zoom-dpi-layout-metrics.spec.ts"
+      - ".github/workflows/print-modal-zoom-dpi-cross-browser.yml"
+  schedule:
+    # Nightly at 04:20 UTC — cheap enough to sweep browsers daily and
+    # catches upstream browser updates that break rendering.
+    - cron: "20 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: print-modal-zoom-dpi-cross-browser-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cross-browser:
+    name: ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chromium
+            project: chromium-reduced-motion
+          - browser: firefox
+            project: firefox-reduced-motion
+          - browser: webkit
+            project: webkit-reduced-motion
+    env:
+      CI: "true"
+      BASE_URL: http://localhost:8080
+      FORCE_COLOR: "1"
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Validate required environment variables
+        run: |
+          missing=()
+          [ -n "$VITE_SUPABASE_URL" ] || missing+=("VITE_SUPABASE_URL")
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing+=("VITE_SUPABASE_PUBLISHABLE_KEY")
+          [ -n "$VITE_SUPABASE_PROJECT_ID" ] || missing+=("VITE_SUPABASE_PROJECT_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        id: bun-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+
+      - name: Cache Playwright browser (${{ matrix.browser }})
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps ${{ matrix.browser }}
+
+      - name: Validate Playwright system deps
+        run: bash .github/scripts/validate-playwright-apt-deps.sh ${{ matrix.browser }}
+
+      - name: Run print-modal zoom/DPI specs (numeric + layout metrics + visual)
+        run: |
+          bunx playwright test \
+            tests/a11y/print-modal-zoom-dpi.spec.ts \
+            tests/a11y/print-modal-zoom-dpi-landscape-desktop.spec.ts \
+            tests/a11y/print-modal-zoom-dpi-layout-metrics.spec.ts \
+            tests/a11y/print-modal-zoom-dpi-visual.spec.ts \
+            --project=${{ matrix.project }} \
+            --retries=1 \
+            --reporter=list,html \
+            --output=test-results
+
+      - name: Render layout metrics step summary
+        if: always()
+        run: bash .github/scripts/render-layout-metrics-summary.sh
+
+      - name: Upload layout metrics JSON records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-zoom-dpi-${{ matrix.browser }}-layout-metrics
+          path: test-results/layout-metrics-summary/*.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-zoom-dpi-${{ matrix.browser }}-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload traces, failure snapshots & visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-modal-zoom-dpi-${{ matrix.browser }}-traces
+          path: |
+            test-results/**/trace.zip
+            test-results/**/*.png
+            test-results/**/*-actual.png
+            test-results/**/*-expected.png
+            test-results/**/*-diff.png
+            test-results/**/sheet-*.png
+            test-results/**/sheet-*.json
+            test-results/**/width-spread-*.json
+            test-results/**/*.webm
+          retention-days: 14
+          if-no-files-found: ignore

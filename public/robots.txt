@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+Disallow: /auth
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /_authenticated
+Disallow: /lovable/
+Disallow: /login
+Disallow: /health-check
+Disallow: /security-dashboard
+Disallow: /builder-checklist
+Disallow: /chart-preview
+Disallow: /fit-tester
+Disallow: /theme-preview
+Disallow: /token-reference
+Disallow: /visual-qa
+Disallow: /test-long-receipt
+Disallow: /test-print-modal
+Disallow: /test-throw
+Disallow: /client-note/
+
+Sitemap: https://precisegroup-pk.lovable.app/sitemap.xml

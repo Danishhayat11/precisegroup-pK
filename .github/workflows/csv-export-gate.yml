@@ -1,0 +1,58 @@
+name: csv-export-gate
+
+# Required status check for merging into main.
+#
+# Runs the FULL csvExportMetadata unit suite *and* the property-based
+# suites (fast-check + fuzz + header round-trip + JSON/CSV equivalence)
+# on every pull request. Property tests use PR-default numRuns via
+# `src/lib/__tests__/_helpers/propRuns.ts` (the nightly 20× multiplier
+# lives in csv-export-property.yml).
+#
+# To enforce merge blocking, add the "csv-export-gate / gate" job to the
+# branch protection rule for `main` under
+#   Settings → Branches → Branch protection rules → Require status checks
+# so PRs cannot merge while this job is failing or pending.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: csv-export-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Full csvExportMetadata suite + property-based tests. Any failing
+      # test here fails the required check and blocks merge.
+      - name: Run CSV export metadata gate
+        run: bun run test:csv:gate

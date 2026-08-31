@@ -1,0 +1,360 @@
+name: full-test-suite
+
+# Runs the ENTIRE vitest suite — every unit, integration, property, and
+# fuzz test discovered by `vitest run` — on every pull request. This is
+# the wide safety net that complements the focused `csv-export-gate`
+# workflow: `csv-export-gate` fails fast on CSV-metadata regressions,
+# while this workflow catches drift anywhere in the codebase (dashboard
+# hydration, ERP bot, FIFO engine, chart QA schemas, etc.) including
+# every fast-check property and hostile-input fuzz suite.
+#
+# Property/fuzz tests default to the PR run-count profile encoded in
+# `src/lib/__tests__/_helpers/propRuns.ts`. The nightly 20× multiplier
+# is scheduled from `csv-export-property.yml` and is deliberately NOT
+# invoked here to keep PR feedback fast.
+#
+# To enforce merge blocking, add the "full-test-suite / test" job to
+# the branch protection rule for `main` under
+#   Settings → Branches → Branch protection rules → Require status checks
+# so PRs cannot merge while this job is failing or pending.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: full-test-suite-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # `actions: read` is required for `actions/download-artifact@v4` (and
+  # for the GitHub REST fallback below) to enumerate artifacts from a
+  # prior workflow run on the same branch, which the swap-leak diff
+  # viewer uses as its "previous run" baseline.
+  actions: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Deterministic-ish clock for any suite that stringifies `new Date()`.
+      TZ: UTC
+      CI: "true"
+      # Explicit PR-profile marker for property tests that opt into a
+      # run-count multiplier via the shared helper.
+      FC_RUNS_MULTIPLIER: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      # Cache Vite's on-disk prebundle + transform cache so repeated
+      # Playwright runs skip redundant esbuild/Rollup work when deps and
+      # vite config are unchanged. Keyed on lockfile + vite config hash.
+      - name: Cache Vite build artifacts
+        uses: actions/cache@v4
+        id: vite-cache
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+            .tanstack
+          key: ${{ runner.os }}-vite-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json', 'vite.config.ts', 'vite.config.js', 'tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-
+      - name: Report Vite cache status
+        shell: bash
+        run: |
+          set -u
+          hit='${{ steps.vite-cache.outputs.cache-hit }}'
+          if [ "$hit" = "true" ]; then status="HIT"; else status="MISS"; fi
+          size="(not present)"
+          for d in node_modules/.vite .vite .tanstack; do
+            if [ -d "$d" ]; then
+              s=$(du -sh "$d" 2>/dev/null | cut -f1)
+              size="${d}=${s}${size:+ }${size}"
+            fi
+          done
+          echo "::group::Vite build cache"
+          echo "status: $status"
+          echo "sizes : $size"
+          echo "::endgroup::"
+          {
+            echo "### Vite build cache"
+            echo ""
+            echo "| Status | Sizes |"
+            echo "| --- | --- |"
+            echo "| **$status** | $size |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Typecheck first — any TS error breaks vitest transform anyway,
+      # so failing here surfaces the root cause faster than a downstream
+      # test import error.
+      - name: Typecheck
+        run: bun run typecheck
+
+      # Seed `test-results/documents-swap-leak/` with the last successful
+      # (or last-known) upload from a previous run on the same branch, so
+      # `writeSwapLeakArtifact` finds prior `rendered.html` / `rendered.txt`
+      # and can produce `diff.html` + `diff.*.patch` alongside any new
+      # leak. Without this baseline, every failing run would look like a
+      # first occurrence and the diff viewer would emit nothing.
+      #
+      # We use the GitHub REST API directly (via `gh api`) instead of
+      # `actions/download-artifact@v4` because:
+      #   - v4 with `run-id` requires a *specific* run — we want "the
+      #     most recent run of this workflow on this ref, whatever it
+      #     was", so we resolve the run id ourselves.
+      #   - It lets us gracefully skip when there IS no prior run
+      #     (first PR, branch just pushed) without failing the job.
+      #
+      # Best-effort: any failure here logs and continues. The rest of
+      # the pipeline works fine without a baseline — the diff artifacts
+      # simply won't be emitted for this run.
+      - name: Restore previous swap-leak artifacts (diff baseline)
+        id: restore-swap-leak-baseline
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: full-test-suite.yml
+          # Prefer the PR base branch when running from a PR (so a PR's
+          # first push still gets a mainline baseline); fall back to the
+          # ref itself for push / workflow_dispatch runs.
+          BASELINE_REF: ${{ github.base_ref || github.ref_name }}
+          REPO: ${{ github.repository }}
+          # Skip our own current run id to avoid picking up an
+          # in-progress run when the workflow is re-run.
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -u
+          mkdir -p test-results/documents-swap-leak
+
+          echo "Looking for the most recent run of ${WORKFLOW_FILE} on ${BASELINE_REF}…"
+          # Ask for the last few completed runs on the target branch so
+          # we can skip the current run id (workflow re-run case) and
+          # any run that produced no swap-leak artifact.
+          runs_json=$(gh api \
+            "repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?branch=${BASELINE_REF}&status=completed&per_page=10" \
+            2>/dev/null || echo '{"workflow_runs":[]}')
+          run_ids=$(printf '%s' "$runs_json" \
+            | jq -r --arg cur "$CURRENT_RUN_ID" '.workflow_runs[] | select((.id|tostring) != $cur) | .id')
+
+          if [ -z "$run_ids" ]; then
+            echo "No previous completed run found on ${BASELINE_REF}. Baseline will be empty."
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          restored=""
+          for run_id in $run_ids; do
+            echo "Inspecting run ${run_id}…"
+            artifact_json=$(gh api "repos/${REPO}/actions/runs/${run_id}/artifacts?per_page=100" 2>/dev/null || echo '{"artifacts":[]}')
+            artifact=$(printf '%s' "$artifact_json" \
+              | jq -r '.artifacts[] | select(.name | startswith("documents-swap-leak-")) | select(.expired == false) | .id' \
+              | head -n1)
+            if [ -z "$artifact" ] || [ "$artifact" = "null" ]; then
+              continue
+            fi
+            echo "Downloading artifact id ${artifact} from run ${run_id}…"
+            tmpzip=$(mktemp)
+            if gh api -H "Accept: application/vnd.github+json" \
+                "repos/${REPO}/actions/artifacts/${artifact}/zip" > "$tmpzip" 2>/dev/null; then
+              # Restore into the same layout the writer expects
+              # (`test-results/documents-swap-leak/<direction>/…`) so
+              # `writeSwapLeakArtifact` finds prior renders in place.
+              if unzip -q -o "$tmpzip" -d test-results/documents-swap-leak; then
+                restored="$run_id"
+                rm -f "$tmpzip"
+                break
+              fi
+            fi
+            rm -f "$tmpzip"
+          done
+
+          if [ -n "$restored" ]; then
+            leaf_count=$(find test-results/documents-swap-leak -mindepth 4 -maxdepth 4 -name manifest.json -type f | wc -l | tr -d ' ')
+            echo "Restored swap-leak baseline from run ${restored} (${leaf_count} leak dirs)."
+            echo "restored=true" >> "$GITHUB_OUTPUT"
+            echo "run_id=${restored}" >> "$GITHUB_OUTPUT"
+            echo "leaf_count=${leaf_count}" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Swap-leak diff baseline"
+              echo ""
+              echo "Restored **${leaf_count}** leak dir(s) from run [\`${restored}\`](https://github.com/${REPO}/actions/runs/${restored})."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No swap-leak artifact found on any recent run of ${BASELINE_REF}. Baseline will be empty."
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # `vitest run` discovers every *.test.ts / *.test.tsx under the
+      # project, which includes ALL fuzz suites (fast-check property
+      # tests, escaping fuzz, JSON envelope shape fuzz, permutation
+      # fuzz, unicode normalization regression, 10k collision stress,
+      # etc.). No allow-list is needed — new *.test.ts files added in
+      # future PRs are picked up automatically.
+      #
+      # We emit machine-readable reports (JUnit + JSON) alongside the
+      # normal console output so failed runs can be triaged from the
+      # uploaded artifact without re-running the suite locally. `tee`
+      # preserves the raw stdout/stderr stream as `vitest.log` for cases
+      # where a crash happens before the reporter can flush.
+      - name: Run full vitest suite (unit + integration + property + fuzz)
+        id: vitest
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          bunx vitest run \
+            --reporter=default \
+            --reporter=junit \
+            --reporter=json \
+            --outputFile.junit=test-results/junit.xml \
+            --outputFile.json=test-results/results.json \
+            2>&1 | tee test-results/vitest.log
+
+      # Always upload — success runs are useful for baseline comparisons
+      # (timings, flake tracking) and failed runs need the artifact most.
+      # `if: always()` ensures we still get the log when the step above
+      # exits non-zero.
+      - name: Upload vitest results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/junit.xml
+            test-results/results.json
+            test-results/vitest.log
+            test-results/fuzz-failures/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Dedicated upload for the fleet-wide project-swap leak artifacts
+      # written by `writeSwapLeakArtifact` in
+      # `src/__tests__/settings-documents-live-preview.e2e.test.tsx`.
+      # Each detected leak dumps `manifest.json`, `rendered.html`, and
+      # `rendered.txt` under
+      # `test-results/documents-swap-leak/<direction>/<docType>/<signal>/`,
+      # so publishing them as their own artifact makes a failing swap
+      # test directly downloadable from the PR checks tab without
+      # digging through the general vitest bundle. `if: always()` +
+      # `if-no-files-found: ignore` means green runs (which write no
+      # leak dirs) don't spam the artifact list with an empty upload.
+      - name: Upload documents swap-leak artifacts
+        id: swap-leak-upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documents-swap-leak-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/documents-swap-leak/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # On failure, emit a `$GITHUB_STEP_SUMMARY` section that enumerates
+      # every leak directory the writer produced and links it back to
+      # the uploaded artifact. GitHub does not let us deep-link into a
+      # single file inside a zip — the workflow-run artifact URL is the
+      # closest anchor — so we render one table row per leak with its
+      # exact path inside the archive, and a single top-of-section
+      # download link so a reviewer can jump straight from PR checks to
+      # the artifact ZIP and use ⌘F on the listed paths.
+      #
+      # The step is best-effort: it only runs when the writer actually
+      # produced leak dirs AND the upload step surfaced an artifact URL.
+      # A green run — or a run whose failure happened before the leak
+      # writer executed — leaves the summary untouched.
+      - name: Summarise swap-leak artifacts on failure
+        if: failure()
+        shell: bash
+        env:
+          ARTIFACT_URL: ${{ steps.swap-leak-upload.outputs.artifact-url }}
+          ARTIFACT_ID: ${{ steps.swap-leak-upload.outputs.artifact-id }}
+          ARTIFACT_NAME: documents-swap-leak-${{ github.run_id }}-${{ github.run_attempt }}
+          LEAK_ROOT: test-results/documents-swap-leak
+        run: |
+          set -u
+          if [ ! -d "$LEAK_ROOT" ]; then
+            echo "No swap-leak directory produced — skipping summary."
+            exit 0
+          fi
+          manifests=$(find "$LEAK_ROOT" -mindepth 4 -maxdepth 4 -name manifest.json -type f | sort)
+          if [ -z "$manifests" ]; then
+            echo "Swap-leak dir exists but contains no manifest.json — skipping summary."
+            exit 0
+          fi
+
+          {
+            echo "## 🚨 Documents swap-leak artifacts"
+            echo ""
+            if [ -n "${ARTIFACT_URL:-}" ]; then
+              echo "**Download the full archive:** [\`${ARTIFACT_NAME}\`](${ARTIFACT_URL})"
+            else
+              echo "**Artifact:** \`${ARTIFACT_NAME}\` (see the *Artifacts* section at the top of this run)."
+            fi
+            echo ""
+            echo "Each row below is a doc/signal pair whose rendered output leaked a cross-brand string. Paths are relative to the archive root; open the ZIP and use ⌘F on the path to jump to the folder."
+            echo ""
+            echo "| Direction | Doc type | Signal | Rendered bytes | Has previous run | Path in archive |"
+            echo "| --- | --- | --- | ---: | :---: | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # `jq` is preinstalled on ubuntu-latest runners; each manifest is
+          # the schema-validated JSON produced by validateSwapLeakManifest.
+          # Falling back to a friendly "n/a" if any field is missing keeps
+          # the summary readable even mid-refactor.
+          while IFS= read -r manifest; do
+            dir=$(dirname "$manifest")
+            rel="${dir#test-results/}"
+            direction=$(jq -r '.direction // "n/a"' "$manifest")
+            docType=$(jq -r '.docType // "n/a"' "$manifest")
+            signal=$(jq -r '.signal.label // "n/a"' "$manifest")
+            bytes=$(jq -r '.renderedBytes // 0' "$manifest")
+            hasPrev=$(jq -r 'if .hasPrevious then "yes" else "no" end' "$manifest")
+            # Escape `|` inside the signal label so it can't break the
+            # markdown table row.
+            signal_safe=$(printf '%s' "$signal" | sed 's/|/\\|/g')
+            printf '| %s | %s | %s | %s | %s | `%s` |\n' \
+              "$direction" "$docType" "$signal_safe" "$bytes" "$hasPrev" "$rel" \
+              >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$manifests"
+
+          count=$(printf '%s\n' "$manifests" | wc -l | tr -d ' ')
+          {
+            echo ""
+            echo "_Total leak directories: **${count}**. Each contains \`manifest.json\`, \`rendered.html\`, \`rendered.txt\`, and (when a prior run exists) \`previous.*\` + \`diff.html\` / \`diff.*.patch\`._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Surface a GitHub-native test summary on the PR checks tab so
+      # reviewers can see failing tests without downloading the artifact.
+      # Runs on failure only — a green run doesn't need the extra UI.
+      - name: Publish test summary
+        if: failure()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: test-results/junit.xml
+          check_name: full-test-suite results
+          fail_on_failure: false
+          require_tests: false

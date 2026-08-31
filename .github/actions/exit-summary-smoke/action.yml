@@ -1,0 +1,107 @@
+name: Exit-summary smoke gate
+description: >
+  Reusable wiring for a `_lib/*.smoke.sh`-style audit smoke test. Runs the
+  smoke script with stdout+stderr tee'd to a log, uploads the captured log
+  as an artifact when the smoke fails, and publishes a pass/fail block to
+  the GitHub Actions job summary so reviewers see the key signal without
+  downloading artifacts. All three sub-steps run under `if: always()` so
+  the gate reports even when an earlier job step failed.
+
+  Designed so any future audit job can adopt the same gating with a single
+  `uses:` line, keeping label/order/placeholder regressions surfaced
+  identically across the matrix.
+
+inputs:
+  script:
+    description: Path to the smoke script to execute (bash).
+    required: false
+    default: scripts/audit/tests/_lib/exit-summary.smoke.sh
+  log-dir:
+    description: Directory to hold the captured smoke log + future artifacts.
+    required: false
+    default: .exit-summary-smoke
+  log-name:
+    description: Filename for the captured smoke log inside `log-dir`.
+    required: false
+    default: exit-summary.smoke.log
+  artifact-name:
+    description: Name of the upload-artifact bundle written on failure.
+    required: false
+    default: exit-summary-smoke-failure
+  retention-days:
+    description: Retention (days) for the failure artifact.
+    required: false
+    default: "14"
+  summary-heading:
+    description: Heading rendered in the GitHub Actions job summary block.
+    required: false
+    default: exit-summary.smoke.sh
+
+outputs:
+  outcome:
+    description: "`success` or `failure` — mirrors the smoke step outcome."
+    value: ${{ steps.smoke.outcome }}
+  log-path:
+    description: Repo-relative path to the captured smoke log.
+    value: ${{ inputs.log-dir }}/${{ inputs.log-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run smoke (${{ inputs.script }})
+      id: smoke
+      if: ${{ always() }}
+      shell: bash
+      env:
+        SMOKE_SCRIPT: ${{ inputs.script }}
+        SMOKE_LOG_DIR: ${{ inputs.log-dir }}
+        SMOKE_LOG_NAME: ${{ inputs.log-name }}
+      run: |
+        set -o pipefail
+        mkdir -p "$SMOKE_LOG_DIR"
+        bash "$SMOKE_SCRIPT" 2>&1 | tee "$SMOKE_LOG_DIR/$SMOKE_LOG_NAME"
+
+    - name: Upload failing smoke output (${{ inputs.artifact-name }})
+      if: ${{ always() && steps.smoke.outcome == 'failure' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.log-dir }}/
+        if-no-files-found: ignore
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Publish smoke result to job summary
+      if: ${{ always() }}
+      shell: bash
+      env:
+        SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        SMOKE_LOG: ${{ inputs.log-dir }}/${{ inputs.log-name }}
+        SMOKE_HEADING: ${{ inputs.summary-heading }}
+        SMOKE_ARTIFACT: ${{ inputs.artifact-name }}
+      run: |
+        set -euo pipefail
+        SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
+        {
+          echo "### ${SMOKE_HEADING}"
+          echo
+          if [ ! -f "$SMOKE_LOG" ]; then
+            echo "_Smoke log not produced — step crashed before tee. Outcome: \`${SMOKE_OUTCOME:-unknown}\`._"
+            exit 0
+          fi
+          tally="$(grep -E '^(✓|✗) ' "$SMOKE_LOG" | tail -n 1 || true)"
+          if [ "${SMOKE_OUTCOME:-}" = "success" ]; then
+            echo "✅ **All ${SMOKE_HEADING} assertions passed.**"
+            [ -n "$tally" ] && echo "" && echo "> $tally"
+          else
+            echo "❌ **${SMOKE_HEADING} failed** (step outcome: \`${SMOKE_OUTCOME:-unknown}\`)."
+            echo
+            echo "**Failing assertions:**"
+            echo
+            echo '```text'
+            grep -E '^[[:space:]]*✗ ' "$SMOKE_LOG" || echo "(no ✗ lines found — see full log artifact)"
+            echo '```'
+            [ -n "$tally" ] && echo "" && echo "> $tally"
+            echo
+            echo "_Full captured log is in the \`${SMOKE_ARTIFACT}\` artifact._"
+          fi
+        } >> "$SUMMARY"

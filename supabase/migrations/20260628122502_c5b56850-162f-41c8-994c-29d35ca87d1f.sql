@@ -1,0 +1,1 @@
+ALTER TABLE public.assistant_messages ADD COLUMN IF NOT EXISTS booking_id text NULL, ADD COLUMN IF NOT EXISTS booking_label text NULL;

@@ -1,0 +1,82 @@
+name: Supabase Linter (SECURITY DEFINER guard)
+
+concurrency:
+  group: supabase-linter-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Run Supabase DB linter
+    runs-on: ubuntu-latest
+    if: ${{ vars.SUPABASE_LINTER_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client jq
+
+      - name: Fail if DB URL not configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is required to run the DB linter."
+            exit 1
+          fi
+
+      - name: Fetch linter lints
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          # lint.lints() is the same view exposed via the Supabase MCP linter tool.
+          psql "$SUPABASE_DB_URL" -X -A -t \
+            -c "select coalesce(jsonb_agg(row_to_json(l)), '[]'::jsonb) from lint.lints() l;" \
+            > lints.json
+          echo "Total lint findings: $(jq 'length' lints.json)"
+          jq '.' lints.json
+
+      - name: Fail on SECURITY DEFINER exposure findings
+        run: |
+          set -euo pipefail
+          # Category: any lint whose name references SECURITY DEFINER exposure
+          # (0028_anon_security_definer_function_executable and related).
+          BAD=$(jq '[.[] | select(
+            (.name // "" | ascii_downcase | contains("security_definer")) or
+            (.title // "" | ascii_downcase | contains("security definer"))
+          )]' lints.json)
+
+          COUNT=$(echo "$BAD" | jq 'length')
+          echo "SECURITY DEFINER findings: $COUNT"
+          echo "$BAD" | jq '.'
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::Supabase linter reported $COUNT SECURITY DEFINER exposure finding(s). Revoke EXECUTE from anon/authenticated or move the function out of the exposed API schema."
+            exit 1
+          fi
+
+      - name: Warn on other ERROR-level findings
+        run: |
+          set -euo pipefail
+          ERR=$(jq '[.[] | select((.level // "" | ascii_upcase) == "ERROR")]' lints.json)
+          COUNT=$(echo "$ERR" | jq 'length')
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::Supabase linter reported $COUNT ERROR-level finding(s)."
+            echo "$ERR" | jq '.'
+            exit 1
+          fi
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-lints
+          path: lints.json

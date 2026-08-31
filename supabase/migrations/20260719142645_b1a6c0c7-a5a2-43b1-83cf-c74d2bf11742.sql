@@ -1,0 +1,2 @@
+ALTER TABLE public.rpc_authorization_denied_log ADD COLUMN IF NOT EXISTS correlation_id text;
+CREATE INDEX IF NOT EXISTS idx_rpc_auth_denied_correlation ON public.rpc_authorization_denied_log (correlation_id) WHERE correlation_id IS NOT NULL;

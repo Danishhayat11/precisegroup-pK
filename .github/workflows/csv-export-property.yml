@@ -1,0 +1,58 @@
+name: csv-export-property
+
+concurrency:
+  group: csv-export-property-${{ github.ref }}
+  cancel-in-progress: true
+
+# CSV/JSON exporter column-key resolution has a lot of collision paths
+# (explicit-first survival, chained `_2/_3/…` numbering, punctuation-only
+# labels). We run the fast-check property + fuzz suites at TWO cadences:
+#
+#   • On every PR / push  → default `numRuns` counts (fast, ~seconds).
+#   • Nightly (03:17 UTC) → FC_RUNS_MULTIPLIER=20, i.e. 20× the collision
+#                            runs, to catch rare shrink paths without
+#                            slowing down PR feedback.
+#
+# The multiplier is honoured by `src/lib/__tests__/_helpers/propRuns.ts`
+# and applied everywhere the property tests call `fc.assert`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 03:17 UTC every day — off-peak, avoids top-of-hour cron congestion.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      multiplier:
+        description: "FC_RUNS_MULTIPLIER (blank = PR default)"
+        required: false
+        default: ""
+
+jobs:
+  property-tests:
+    runs-on: ubuntu-latest
+    # Nightly + manual override runs get more time; PRs stay snappy.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 30 || 10 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Property tests (PR — default numRuns)
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: bun run test:csv:property
+
+      - name: Property tests (nightly — 20× numRuns)
+        if: github.event_name == 'schedule'
+        run: bun run test:csv:property:nightly
+
+      - name: Property tests (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          FC_RUNS_MULTIPLIER: ${{ inputs.multiplier }}
+        run: bun run test:csv:property

@@ -1,0 +1,120 @@
+name: Reports loader tests (required)
+
+# Runs the full Vitest suite for report route loaders on every pull request
+# and every push to main. Discovers loader test files via a glob so newly
+# added `reports-*loader*` / `reports-routes-loader-*` tests are picked up
+# automatically — no workflow edit needed.
+#
+# The final `required-check` job depends on every test job and is what
+# branch protection should require to merge. Configure this in
+# GitHub → Settings → Branches → Branch protection rules → main:
+#   • Require status checks to pass before merging
+#   • Add "Reports loader tests / required-check" as a required check
+# Once configured, any regression in these suites blocks the merge button.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: reports-loader-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vitest:
+    name: Report loader Vitest suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        id: bun-cache
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        if: steps.bun-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Discover report loader test files
+        id: discover
+        run: |
+          set -euo pipefail
+          # Every loader-related suite: shape, router-level, fallback,
+          # schema, tenant scoping, empty/error contracts, and Zod contract
+          # snapshots. Sorted for deterministic ordering.
+          FILES=$(ls \
+            src/__tests__/reports-loaders-shape.test.ts \
+            src/__tests__/reports-routes-loader-router.test.ts \
+            src/__tests__/reports-routes-loader-fallback.test.ts \
+            src/__tests__/reports-routes-loader-schema.test.ts \
+            src/__tests__/reports-routes-loader-tenant-scoping.test.ts \
+            src/__tests__/reports-routes-loader-empty-and-error.test.ts \
+            src/__tests__/reports-routes-contract-snapshots.test.ts \
+            2>/dev/null | sort)
+          if [ -z "$FILES" ]; then
+            echo "::error::No report loader test files discovered"
+            exit 1
+          fi
+          echo "Discovered loader test files:"
+          echo "$FILES"
+          {
+            echo "files<<EOF"
+            echo "$FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run report loader Vitest suites
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046
+          bunx vitest run \
+            $(echo "${{ steps.discover.outputs.files }}" | tr '\n' ' ') \
+            --reporter=verbose \
+            --passWithNoTests=false
+
+      - name: Ensure contract snapshots are committed (no drift)
+        # Snapshot files must be checked in. If the run just wrote new
+        # snapshots, the working tree changes and this step fails the PR
+        # so the author reviews and commits them explicitly.
+        run: |
+          if ! git diff --exit-code -- 'src/__tests__/__snapshots__' 2>/dev/null; then
+            echo "::error::Contract snapshots changed. Review the diff, run 'bunx vitest -u' locally, and commit the updated snapshots."
+            exit 1
+          fi
+
+  required-check:
+    # Aggregator job so branch protection only needs to require ONE check.
+    # Fails if any dependency job failed OR was skipped, which prevents a
+    # green-by-skip merge.
+    name: required-check
+    needs: [vitest]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all loader test jobs succeeded
+        run: |
+          if [ "${{ needs.vitest.result }}" != "success" ]; then
+            echo "::error::Reports loader tests did not pass (result: ${{ needs.vitest.result }})"
+            exit 1
+          fi
+          echo "All reports loader test jobs passed."

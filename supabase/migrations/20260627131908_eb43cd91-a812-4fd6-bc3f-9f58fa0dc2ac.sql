@@ -1,0 +1,1 @@
+CREATE POLICY "audit_read_booking_docs" ON public.audit_logs FOR SELECT TO authenticated USING (entity = 'booking_document');
