@@ -98,16 +98,16 @@ describe("cross-tab theme + motion propagation", () => {
 
     // Simulate another tab flipping the stored theme to "dark". The browser
     // fires `storage` in every OTHER tab (not the writer) with the new value.
+    // jsdom rejects window.localStorage as storageArea, so we omit it and
+    // instead write the value before dispatching so the handler can read it.
     act(() => {
       window.localStorage.setItem(THEME_STORAGE_KEY, "dark");
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: THEME_STORAGE_KEY,
-          oldValue: "light",
-          newValue: "dark",
-          storageArea: window.localStorage,
-        }),
-      );
+      const evt = new StorageEvent("storage", {
+        key: THEME_STORAGE_KEY,
+        oldValue: "light",
+        newValue: "dark",
+      });
+      window.dispatchEvent(evt);
     });
 
     expect(screen.getByTestId("theme").textContent).toBe("dark");
@@ -126,14 +126,12 @@ describe("cross-tab theme + motion propagation", () => {
 
     act(() => {
       window.localStorage.removeItem(THEME_STORAGE_KEY);
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: THEME_STORAGE_KEY,
-          oldValue: "dark",
-          newValue: null,
-          storageArea: window.localStorage,
-        }),
-      );
+      const evt = new StorageEvent("storage", {
+        key: THEME_STORAGE_KEY,
+        oldValue: "dark",
+        newValue: null,
+      });
+      window.dispatchEvent(evt);
     });
 
     // Default theme is "system"; with system-dark = false the resolved value
@@ -152,14 +150,12 @@ describe("cross-tab theme + motion propagation", () => {
     );
 
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: "some.other.key",
-          oldValue: null,
-          newValue: "dark",
-          storageArea: window.localStorage,
-        }),
-      );
+      const evt = new StorageEvent("storage", {
+        key: "some.other.key",
+        oldValue: null,
+        newValue: "dark",
+      });
+      window.dispatchEvent(evt);
     });
 
     expect(screen.getByTestId("theme").textContent).toBe("light");

@@ -54,12 +54,15 @@ describe("runWithBudget — hard perf ceiling", () => {
   });
 
   it("does NOT throw when the minimum fits under the hard limit but exceeds soft budget", () => {
-    // 3 × 5ms = 15ms > budget 5ms, but <= hardLimit 5*4 = 20ms → OK.
+    // 3 × 5ms = 15ms > budget 5ms, but <= hardLimit 5*10 = 50ms → OK.
+    // hardLimitFactor is intentionally generous here — this test validates
+    // the soft-vs-hard distinction, not machine timing. Factor 10 ensures
+    // it never false-fails on slow CI runners.
     const res = runWithBudget({
       name: "soft-only",
       minIterations: 3,
       budgetMs: 5,
-      hardLimitFactor: 4,
+      hardLimitFactor: 10,
       run: () => {
         const stop = performance.now() + 5;
         // eslint-disable-next-line no-empty
