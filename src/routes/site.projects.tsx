@@ -24,6 +24,8 @@ import luxuryVillaMargalla from "@/assets/site/luxury-villa-margalla.jpg";
 import commercialTowerNexus from "@/assets/site/commercial-tower-nexus.jpg";
 import luxuryPenthouseSky from "@/assets/site/luxury-penthouse-sky.jpg";
 import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
+import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
+import manalHeightsElevation from "@/assets/site/manal-heights-actual-elevation.jpg";
 import { ProjectDetailModal } from "@/components/site/ProjectDetailModal";
 
 import { pageSeo, breadcrumbList } from "@/lib/site-seo";
@@ -86,7 +88,7 @@ const PROJECTS: readonly Project[] = [
     beds: 2,
     baths: 2,
     areaSqft: 1850,
-    image: manalHeightsFacade,
+    image: manalHeightsPoster,
     summary:
       "Prime investment mixed-use tower on NUST Service Road: semi-furnished luxury apartments, shopping atrium & corporate offices with high ROI and student/faculty rental yields.",
   },

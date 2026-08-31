@@ -29,6 +29,7 @@ import projCommercial from "@/assets/site/project-commercial.webp";
 import projTownhouse from "@/assets/site/project-townhouse.webp";
 import projPenthouse from "@/assets/site/project-penthouse.webp";
 import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
+import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
 import teamMushtaqAsset from "@/assets/site/team-mushtaq.jpg.asset.json";
 const teamMushtaq = teamMushtaqAsset.url;
 // Responsive AVIF/WebP variants for Mushtaq's headshot, cropped 4:5 from a
@@ -213,7 +214,7 @@ const SIGNATURE = [
     kind: "Mixed-Use Tower · Shops & Luxury Suites",
     location: "NUST Service Road, H-13 Islamabad",
     year: "2026",
-    image: manalHeightsFacade,
+    image: manalHeightsPoster,
     summary:
       "Signature mixed-use development on NUST Service Road: double-height shopping atrium, corporate offices & semi-furnished luxury apartments.",
   },

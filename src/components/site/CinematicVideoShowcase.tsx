@@ -20,6 +20,8 @@ import luxuryVillaMargalla from "@/assets/site/luxury-villa-margalla.jpg";
 import commercialTowerNexus from "@/assets/site/commercial-tower-nexus.jpg";
 import luxuryPenthouseSky from "@/assets/site/luxury-penthouse-sky.jpg";
 import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
+import manalHeightsElevation from "@/assets/site/manal-heights-actual-elevation.jpg";
+import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
 
 type VideoScene = {
   id: string;
@@ -43,7 +45,7 @@ const SCENES: VideoScene[] = [
     subtitle: "3D Architectural Flythrough & Luxury Suites Showcase",
     tag: "Manal Heights H-13",
     duration: "4K HDR · 03:45",
-    image: manalHeightsFacade,
+    image: manalHeightsPoster,
     specs: [
       "NUST Service Road H-13",
       "Semi-Furnished Luxury Suites",

@@ -22,9 +22,12 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { fmtPKR } from "@/lib/format";
+import manalHeightsElevation from "@/assets/site/manal-heights-actual-elevation.jpg";
+import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
+import manalHeightsAtriumActual from "@/assets/site/manal-heights-actual-atrium.jpg";
+import manalHeightsFloorplanActual from "@/assets/site/manal-heights-actual-floorplan.jpg";
+import manalHeightsH13Infographic from "@/assets/site/manal-heights-h13-infographic.jpg";
 import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
-import manalHeightsAtrium from "@/assets/site/manal-heights-atrium.jpg";
-import manalHeightsFloorplan from "@/assets/site/manal-heights-floorplan.jpg";
 
 export type ProjectDetail = {
   id: string;
@@ -58,48 +61,52 @@ export type ProjectDetail = {
 export const SITE_PROJECTS: Record<string, ProjectDetail> = {
   "manal-heights": {
     id: "manal-heights",
-    title: "Manal Heights — Prime Investment Tower",
+    title: "Manal Heights — H-13 Islamabad",
     category: "luxury",
-    type: "Mixed-Use Tower · Shops, Studio & 2-Bed Luxury Apartments",
+    type: "Shops, Semi-Furnished Studio & 2-Bed Luxury Apartments, Offices",
     location: "NUST Service Road, Sector H-13, Islamabad",
-    subLocation: "Walking distance to NUST University, H-13 Islamabad",
+    subLocation: "Walking distance to NUST University (10 Mins from Airport)",
     price: "PKR 95 Lacs – 2.85 Cr",
     sqft: "420 – 1,850 sq.ft",
     beds: 2,
     baths: 2,
     floors: "Lower Ground + Ground + 7 Floors + Sky Lounge",
-    completion: "Under Rapid Construction · 2026",
+    completion: "Rapid Construction · 2026",
     status: "Bookings Open · Limited Units Available",
     videoUrl: "https://www.facebook.com/share/v/18hJQwxFdK/?mibextid=wwXIfr",
-    videoTitle: "Official 3D Architectural Walkthrough & Building Showcase",
+    videoTitle: "Official 3D Architectural Reel & Building Showcase",
     images: [
+      manalHeightsElevation,
+      manalHeightsPoster,
+      manalHeightsAtriumActual,
+      manalHeightsFloorplanActual,
+      manalHeightsH13Infographic,
       manalHeightsFacade,
-      manalHeightsAtrium,
-      manalHeightsFloorplan,
     ],
     description:
-      "Manal Heights is a premier signature mixed-use development positioned directly on NUST Service Road in Sector H-13 Islamabad. Featuring double-height commercial retail shops and shopping atrium on lower tiers, corporate executive offices, and semi-furnished luxury studio and 2-bedroom residential suites with staggered cantilevered balconies and lush planter greenery.",
+      "Manal Heights is an authentic landmark development strategically positioned on NUST Service Road in Sector H-13 Islamabad. Featuring contemporary architecture with staggered cantilevered balconies with integrated planter boxes, ground-floor supermarket and commercial retail arcade, double-height shopping atrium, corporate executive offices, and semi-furnished luxury studio and 2-bedroom residential suites.",
     highlights: [
-      "Prime location on NUST Service Road — walking distance to NUST University",
-      "Just 10 minutes from Islamabad International Airport & Motorway M-1 / M-2",
-      "Massive rental demand from university students, faculty, and corporate executives",
-      "Approved sector H-13 by CDA ICT with high annual capital appreciation",
+      "Authentic Building Architecture: Staggered cantilevered balconies with green planters & glass railings",
+      "Prime NUST Location: Walking distance to Pakistan's #1 University (NUST) on NUST Service Road",
+      "Airport & Motorway: 10 mins (10 Km) from Islamabad Int'l Airport via Srinagar Highway & M-1/M-2",
+      "High Rental Yield: Massive demand from students, faculty, and executives with Airbnb potential",
+      "Regulatory Clearances: Approved sector H-13 by CDA ICT with booming infrastructure",
     ],
     amenities: [
-      "Double-height shopping atrium with grand staircase & brand outlets",
+      "Double-height commercial shopping atrium with grand staircase & retail brands",
       "Semi-furnished designer studio & 2-bed apartments with private balconies",
-      "High-speed dual passenger & cargo elevators with 100% generator power backup",
+      "Dual high-speed passenger & cargo elevators with 100% generator power backup",
       "Rooftop pergola sky terrace with panoramic Margalla & Islamabad views",
       "Underground multi-level secure parking with automated access control",
       "24/7 CCTV surveillance, smart intercom, and dedicated maintenance facility",
     ],
     specs: [
       { label: "Location Advantage", value: "NUST Service Road, H-13 Islamabad" },
-      { label: "Airport Proximity", value: "10 Minutes via Srinagar Highway" },
+      { label: "Proximity to NUST", value: "Walking Distance to Campus" },
+      { label: "Airport Proximity", value: "10 Km / 10 Minutes Drive" },
       { label: "Apartment Types", value: "Semi-Furnished Studio & 2-Bed Suites" },
       { label: "Commercial Retail", value: "Double-Height Atrium & Supermarket" },
-      { label: "ROI Potential", value: "High Rental Yield & Short-Term Airbnb Demand" },
-      { label: "Regulatory Status", value: "CDA / ICT Approved Development" },
+      { label: "Approval & Title", value: "CDA / ICT Approved Project" },
     ],
     paymentPlan: {
       downPayment: "25% at Booking",
