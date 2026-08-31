@@ -14,9 +14,31 @@ import {
 } from "@/lib/logos";
 import { getDocStyle } from "@/lib/letterhead";
 
+if (typeof localStorage === "undefined") {
+  const store = new Map<string, string>();
+  (globalThis as unknown as { localStorage: Storage }).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      store.set(k, String(v));
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    get length() {
+      return store.size;
+    },
+  } as unknown as Storage;
+}
+
 beforeEach(() => {
   // Ensure user-set overrides don't bleed across tests; we test pure defaults.
-  localStorage.clear();
+  if (typeof localStorage !== "undefined") {
+    localStorage.clear();
+  }
 });
 
 describe("LOGO_OPTIONS — brand grouping", () => {
