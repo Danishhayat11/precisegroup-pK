@@ -17,7 +17,18 @@
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowUpRight, MapPin, BedDouble, Bath, Ruler, Phone, Mail } from "lucide-react";
+import {
+  ArrowUpRight,
+  MapPin,
+  BedDouble,
+  Bath,
+  Ruler,
+  Phone,
+  Mail,
+  Sparkles,
+  MessageCircle,
+  CheckCircle2,
+} from "lucide-react";
 import { Section, Kicker } from "@/components/site/SiteChrome";
 import { useStableReducedMotion } from "@/components/site/useStableReducedMotion";
 
@@ -696,13 +707,24 @@ function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
               {
                 id: "mushtaq",
                 name: "Engr. Mushtaq Ahmad",
                 role: "Founder & CEO",
-                headshot: headshotGroups[0],
+                fallback: teamMushtaq,
+                avifSrcSet: teamMushtaqAvifSrcSet,
+                webpSrcSet: teamMushtaqWebpSrcSet,
+                lqip: teamLqip.mushtaq,
+                alt: "Professional editorial portrait of Engr. Mushtaq Ahmad, CEO & Founder of Precise Realtors & Builders, in bespoke dark navy tailored Italian wool suit, spread-collar shirt, and silk tie in a modern boardroom.",
+                accent: "Executive Leadership",
+                tagline: "Visionary Structural Mastery",
+                discipline: "B.Sc Civil Engineering (UET) · PEC Registered",
+                attireStyle: "Bespoke Navy Italian Wool Tailoring & Spread Collar",
+                quote: "Engineering is the sacred trust of building generational monuments.",
+                stat: "1.5M+ Sq. Ft. Delivered",
+                phone: "+92 344 5533767",
                 priority: true,
                 objectPosition: "center 25%" as const,
               },
@@ -710,7 +732,18 @@ function HomePage() {
                 id: "danish",
                 name: "Engr. Danish Hayat",
                 role: "Head of Engineering & Ops",
-                headshot: headshotGroups[1],
+                fallback: teamDanish,
+                avifSrcSet: teamDanishAvifSrcSet,
+                webpSrcSet: teamDanishWebpSrcSet,
+                lqip: teamLqip.danish,
+                alt: "Professional editorial portrait of Engr. Danish Hayat, Head of Engineering & Business Operations at Precise Realtors & Builders, styled in Steve Jobs modern minimalist black merino turtleneck and charcoal tailored Italian blazer.",
+                accent: "Engineering & Tech Vision",
+                tagline: "Digital ERP & Precision Architecture",
+                discipline: "B.Sc Engineering · PMP Certified Professional",
+                attireStyle: "Minimalist Black Merino Turtleneck & Italian Charcoal Wool",
+                quote: "Simplicity and precision are the ultimate forms of sophistication.",
+                stat: "+24% Turnaround Velocity",
+                phone: "+92 337 0129621",
                 priority: true,
                 objectPosition: "center 28%" as const,
               },
@@ -718,7 +751,18 @@ function HomePage() {
                 id: "saeed",
                 name: "Saeed ullah",
                 role: "Head of Sales & Relations",
-                headshot: headshotGroups[2],
+                fallback: teamSaeed,
+                avifSrcSet: teamSaeedAvifSrcSet,
+                webpSrcSet: teamSaeedWebpSrcSet,
+                lqip: teamLqip.saeed,
+                alt: "Professional editorial portrait of Saeed Ullah, Head of Sales & Client Relations at Precise Realtors & Builders, in bespoke 3-piece tailored slate grey suit with gold cufflinks in a luxury real estate showroom gallery.",
+                accent: "Client Advisory & Wealth",
+                tagline: "High-ROI Portfolio Strategy",
+                discipline: "BBA Real Estate Investment Management",
+                attireStyle: "Bespoke 3-Piece Slate Tailoring & French Cuffs",
+                quote: "True wealth in real estate is built on clarity and lifelong partnerships.",
+                stat: "PKR 4.5B+ Portfolio Closed",
+                phone: "+92 344 5533767",
                 priority: true,
                 objectPosition: "center 32%" as const,
               },
@@ -727,35 +771,70 @@ function HomePage() {
                 key={m.name}
                 {...fade}
                 transition={{ ...(fade.transition ?? {}), delay: i * 0.08 }}
-                className="group cursor-pointer"
+                className="group cursor-pointer rounded-3xl bg-card/60 dark:bg-card/30 backdrop-blur-xl border border-border/80 hover:border-amber-500/40 shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-1.5 p-4 sm:p-5 flex flex-col justify-between"
                 onClick={() => setSelectedMember(m.id)}
               >
-                <div className="lg-media relative aspect-[4/5] bg-muted overflow-hidden">
-                  <TeamHeadshot
-                    name={m.name}
-                    alt={`Portrait of ${m.name}, ${m.role} at Precise Realtors & Builders`}
-                    fallback={m.headshot.fallback}
-                    avifSrcSet={m.headshot.avifSrcSet}
-                    webpSrcSet={m.headshot.webpSrcSet}
-                    lqip={teamLqip[m.name as keyof typeof teamLqip]}
-                    priority={m.priority}
-                    objectPosition={m.objectPosition}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 flex flex-col justify-end p-6">
-                    <span className="px-3.5 py-1.5 rounded-xl bg-card text-foreground font-semibold text-xs shadow-lg inline-flex items-center gap-1.5 self-start">
-                      <span>View Executive Profile</span>
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </span>
+                <div>
+                  <div className="lg-media relative aspect-[4/5] rounded-2xl bg-muted overflow-hidden">
+                    <TeamHeadshot
+                      name={m.name}
+                      alt={m.alt}
+                      fallback={m.fallback}
+                      avifSrcSet={m.avifSrcSet}
+                      webpSrcSet={m.webpSrcSet}
+                      lqip={m.lqip}
+                      priority={m.priority}
+                      objectPosition={m.objectPosition}
+                    />
+
+                    {/* Department badge */}
+                    <div className="absolute top-3.5 left-3.5 z-10">
+                      <span className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-black/60 backdrop-blur-md text-amber-400 border border-white/10 shadow-sm">
+                        {m.accent}
+                      </span>
+                    </div>
+
+                    {/* Hover reveal CTA overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 flex flex-col justify-end p-5">
+                      <span className="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs shadow-lg inline-flex items-center gap-1.5 self-start">
+                        <span>View Executive Dossier</span>
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-lg md:text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                        {m.name}
+                      </h3>
+                    </div>
+
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
+                      {m.role}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span>{m.discipline}</span>
+                    </p>
+
+                    {/* Sartorial Style Chip */}
+                    <div className="pt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground/90">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <span className="italic">{m.attireStyle}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-6">
-                  <h3 className="site-h3 text-foreground group-hover:text-primary transition-colors">
-                    {m.name}
-                  </h3>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--gold)]">
-                    {m.role}
-                  </p>
+                <div className="mt-5 pt-4 border-t border-border/60 flex items-center justify-between gap-3 text-xs">
+                  <span className="font-bold text-foreground bg-primary/10 px-2.5 py-1 rounded-lg">
+                    {m.stat}
+                  </span>
+                  <div className="flex items-center gap-1.5 text-muted-foreground group-hover:text-primary transition-colors font-medium">
+                    <span>Full Profile</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </div>
                 </div>
               </motion.article>
             ))}

@@ -10,8 +10,12 @@ import {
   GraduationCap,
   CheckCircle2,
   MessageCircle,
+  Sparkles,
+  Quote,
+  TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
-import teamMushtaq from "@/assets/site/team-mushtaq-1600.webp";
+import teamMushtaq from "@/assets/site/team-mushtaq.jpg";
 import teamDanish from "@/assets/site/team-danish.jpg";
 import teamSaeed from "@/assets/site/team-saeed.jpg";
 
@@ -24,6 +28,9 @@ export type TeamMember = {
   phone: string;
   email: string;
   image: string;
+  quote: string;
+  attire: string;
+  stats: { label: string; value: string }[];
   bio: string[];
   achievements: string[];
   projects: string[];
@@ -40,6 +47,15 @@ export const TEAM_MEMBERS: Record<string, TeamMember> = {
     phone: "+92 344 5533767",
     email: "mushtaq@precisegroup.pk",
     image: teamMushtaq,
+    quote:
+      "Engineering is not merely assembling concrete and steel; it is the sacred responsibility of building generational trust and architectural monuments that stand unbroken for decades.",
+    attire:
+      "Bespoke Italian midnight-navy wool tailored suit, spread-collar Egyptian cotton shirt, textured silk necktie, and an executive timepiece — reflecting timeless leadership and structural mastery.",
+    stats: [
+      { label: "Civil Construction", value: "1.5M+ Sq. Ft." },
+      { label: "Industry Mastery", value: "20+ Years" },
+      { label: "Delivery Ethics", value: "100% Zero-Debt" },
+    ],
     specialization: "Structural Engineering, Master Planning & Real Estate Portfolio Development",
     bio: [
       "Engr. Mushtaq Ahmad is the founding visionary behind Precise Realtors & Builders (Pvt.) Ltd. With over two decades of hands-on structural engineering and real estate development leadership across Islamabad, Rawalpindi, and KP, he has pioneered landmark commercial and residential developments adhering to uncompromising engineering standards.",
@@ -68,6 +84,15 @@ export const TEAM_MEMBERS: Record<string, TeamMember> = {
     phone: "+92 337 0129621",
     email: "danish@precisegroup.pk",
     image: teamDanish,
+    quote:
+      "Simplicity and precision are the ultimate forms of sophistication. When construction discipline merges seamlessly with digital intelligence, zero-defect delivery becomes the standard.",
+    attire:
+      "Modern Steve Jobs-inspired executive tech aesthetic: sharp Italian charcoal wool tailored blazer over a fine-gauge black merino turtleneck with minimalist titanium timepiece — embodying innovation, clarity, and precision.",
+    stats: [
+      { label: "Turnaround Boost", value: "+24% Efficiency" },
+      { label: "ERP Infrastructure", value: "Proprietary Core" },
+      { label: "Global Reach", value: "GCC / UK / USA" },
+    ],
     specialization:
       "Operations Automation, ERP Infrastructure, Project Execution & Modern Architecture",
     bio: [
@@ -96,6 +121,15 @@ export const TEAM_MEMBERS: Record<string, TeamMember> = {
     phone: "+92 344 5533767",
     email: "sales@precisegroup.pk",
     image: teamSaeed,
+    quote:
+      "True wealth in real estate is built on clarity, uncompromising honesty, and strategic foresight. Every client relationship is a lifelong partnership.",
+    attire:
+      "Bespoke 3-piece tailored slate-grey suit with handcrafted vest, crisp French cuff shirt with gold cufflinks, and jacquard patterned silk tie — projecting distinction, poise, and welcoming elegance.",
+    stats: [
+      { label: "Transactions Closed", value: "PKR 4.5B+" },
+      { label: "Client Retention", value: "98% Repeat" },
+      { label: "Overseas Portfolios", value: "500+ Active" },
+    ],
     specialization: "Commercial Real Estate Sales, Portfolio Advisory, Client Wealth Management",
     bio: [
       "Saeed Ullah directs client relations, private wealth portfolio management, and commercial leasing for Precise Group. With an intimate understanding of capital gains velocity in Islamabad's high-growth sectors, he advises private investors, corporate entities, and overseas Pakistanis on high-ROI asset acquisition.",
@@ -174,6 +208,44 @@ export function TeamModal({
               </div>
             </div>
 
+            {/* Executive Stat Pillars */}
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {member.stats.map((s, i) => (
+                <div
+                  key={i}
+                  className="p-3.5 rounded-2xl bg-card border border-border/70 shadow-sm text-center"
+                >
+                  <div className="text-base md:text-lg font-bold text-foreground tracking-tight">
+                    {s.value}
+                  </div>
+                  <div className="text-[11px] font-medium text-muted-foreground mt-0.5">
+                    {s.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quote Callout */}
+            <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-card to-primary/10 border border-amber-500/30 mb-6 relative overflow-hidden">
+              <Quote className="w-8 h-8 text-amber-500/20 absolute -top-1 -right-1" />
+              <p className="text-xs md:text-sm font-serif italic text-foreground/90 leading-relaxed">
+                "{member.quote}"
+              </p>
+            </div>
+
+            {/* Sartorial Style & Professional Dressing */}
+            <div className="p-4 rounded-2xl bg-muted/40 border border-border/70 mb-6">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  Executive Sartorial Style &amp; Poise
+                </h4>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {member.attire}
+              </p>
+            </div>
+
             {/* Quick Action Bar */}
             <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-muted/50 border border-border/60 mb-6">
               <Button asChild size="sm" className="min-h-10 rounded-lg font-medium shadow-sm">
@@ -217,7 +289,7 @@ export function TeamModal({
             <div className="space-y-3 mb-6">
               <h4 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                 <Building className="w-4 h-4 text-primary" />
-                Executive Profile
+                Executive Leadership Profile
               </h4>
               {member.bio.map((p, i) => (
                 <p key={i} className="text-sm leading-relaxed text-muted-foreground">

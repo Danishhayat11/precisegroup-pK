@@ -78,7 +78,8 @@ describe("TeamHeadshot — Mushtaq <picture> regression", () => {
     // <source> negotiation and the <img> so responsive behavior stays in
     // sync across every breakpoint (mobile full-width → tablet 50vw →
     // desktop 400px slot).
-    const EXPECTED_SIZES = "(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw";
+    const EXPECTED_SIZES =
+      "(min-width: 1280px) 344px, (min-width: 768px) calc((100vw - 128px) / 3 - 40px), (min-width: 640px) calc(100vw - 120px), calc(100vw - 72px)";
     expect(avif.getAttribute("sizes")).toBe(EXPECTED_SIZES);
     expect(webp.getAttribute("sizes")).toBe(EXPECTED_SIZES);
     expect(img!.getAttribute("sizes")).toBe(EXPECTED_SIZES);
@@ -152,7 +153,8 @@ describe("TeamHeadshot — Danish <picture> regression", () => {
     expect(img!.getAttribute("loading")).toBe("lazy");
     expect(img!.getAttribute("decoding")).toBe("async");
 
-    const EXPECTED_SIZES = "(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw";
+    const EXPECTED_SIZES =
+      "(min-width: 1280px) 344px, (min-width: 768px) calc((100vw - 128px) / 3 - 40px), (min-width: 640px) calc(100vw - 120px), calc(100vw - 72px)";
     expect(avif.getAttribute("sizes")).toBe(EXPECTED_SIZES);
     expect(webp.getAttribute("sizes")).toBe(EXPECTED_SIZES);
     expect(img!.getAttribute("sizes")).toBe(EXPECTED_SIZES);
@@ -165,7 +167,9 @@ describe("Team cards — Danish source audit on /site", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "..", "routes", "site.index.tsx"), "utf8");
 
   it("Danish's data entry wires avif, webp, jpg fallback, lqip, and non-empty alt", () => {
-    const match = source.match(/name:\s*"Engr\.\s*Danish Hayat"[\s\S]*?alt:\s*"[^"]+"/);
+    const match = source.match(
+      /id:\s*"danish"[\s\S]*?name:\s*"Engr\.\s*Danish Hayat"[\s\S]*?alt:\s*"[^"]+"/,
+    );
     expect(match, "could not locate Danish entry in site.index.tsx").not.toBeNull();
     const entry = match![0];
 
@@ -183,7 +187,7 @@ describe("Team cards — alt-text audit on /site", () => {
   it("every <TeamHeadshot> usage in site.index.tsx carries an alt prop", () => {
     // Match every JSX opening tag through its close `/>` so we can inspect
     // the props on each individual usage. Non-greedy, dot-all.
-    const usages = source.match(/<TeamHeadshot[\s\S]*?\/>/g) ?? [];
+    const usages = source.match(/<TeamHeadshot\s[\s\S]*?\/>/g) ?? [];
     expect(usages.length, "expected at least one <TeamHeadshot> usage").toBeGreaterThan(0);
 
     for (const usage of usages) {
@@ -197,7 +201,9 @@ describe("Team cards — alt-text audit on /site", () => {
     // Grab Mushtaq's object literal from `name:` through the terminating
     // `accent: "..."` line — anchoring on both ends avoids the non-greedy
     // matcher stopping at an unrelated `},` that appears earlier in JSX.
-    const match = source.match(/name:\s*"Engr\.\s*Mushtaq Ahmad"[\s\S]*?accent:\s*"[^"]*"/);
+    const match = source.match(
+      /id:\s*"mushtaq"[\s\S]*?name:\s*"Engr\.\s*Mushtaq Ahmad"[\s\S]*?accent:\s*"[^"]*"/,
+    );
 
     expect(match, "could not locate Mushtaq entry in site.index.tsx").not.toBeNull();
     const entry = match![0];
