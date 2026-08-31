@@ -18,8 +18,13 @@ import {
   ChevronRight,
   ExternalLink,
   Sparkles,
+  Play,
+  TrendingUp,
 } from "lucide-react";
 import { fmtPKR } from "@/lib/format";
+import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
+import manalHeightsAtrium from "@/assets/site/manal-heights-atrium.jpg";
+import manalHeightsFloorplan from "@/assets/site/manal-heights-floorplan.jpg";
 
 export type ProjectDetail = {
   id: string;
@@ -40,6 +45,8 @@ export type ProjectDetail = {
   highlights: string[];
   amenities: string[];
   specs: { label: string; value: string }[];
+  videoUrl?: string;
+  videoTitle?: string;
   paymentPlan: {
     downPayment: string;
     installments: string;
@@ -49,6 +56,58 @@ export type ProjectDetail = {
 };
 
 export const SITE_PROJECTS: Record<string, ProjectDetail> = {
+  "manal-heights": {
+    id: "manal-heights",
+    title: "Manal Heights — Prime Investment Tower",
+    category: "luxury",
+    type: "Mixed-Use Tower · Shops, Studio & 2-Bed Luxury Apartments",
+    location: "NUST Service Road, Sector H-13, Islamabad",
+    subLocation: "Walking distance to NUST University, H-13 Islamabad",
+    price: "PKR 95 Lacs – 2.85 Cr",
+    sqft: "420 – 1,850 sq.ft",
+    beds: 2,
+    baths: 2,
+    floors: "Lower Ground + Ground + 7 Floors + Sky Lounge",
+    completion: "Under Rapid Construction · 2026",
+    status: "Bookings Open · Limited Units Available",
+    videoUrl: "https://www.facebook.com/share/v/18hJQwxFdK/?mibextid=wwXIfr",
+    videoTitle: "Official 3D Architectural Walkthrough & Building Showcase",
+    images: [
+      manalHeightsFacade,
+      manalHeightsAtrium,
+      manalHeightsFloorplan,
+    ],
+    description:
+      "Manal Heights is a premier signature mixed-use development positioned directly on NUST Service Road in Sector H-13 Islamabad. Featuring double-height commercial retail shops and shopping atrium on lower tiers, corporate executive offices, and semi-furnished luxury studio and 2-bedroom residential suites with staggered cantilevered balconies and lush planter greenery.",
+    highlights: [
+      "Prime location on NUST Service Road — walking distance to NUST University",
+      "Just 10 minutes from Islamabad International Airport & Motorway M-1 / M-2",
+      "Massive rental demand from university students, faculty, and corporate executives",
+      "Approved sector H-13 by CDA ICT with high annual capital appreciation",
+    ],
+    amenities: [
+      "Double-height shopping atrium with grand staircase & brand outlets",
+      "Semi-furnished designer studio & 2-bed apartments with private balconies",
+      "High-speed dual passenger & cargo elevators with 100% generator power backup",
+      "Rooftop pergola sky terrace with panoramic Margalla & Islamabad views",
+      "Underground multi-level secure parking with automated access control",
+      "24/7 CCTV surveillance, smart intercom, and dedicated maintenance facility",
+    ],
+    specs: [
+      { label: "Location Advantage", value: "NUST Service Road, H-13 Islamabad" },
+      { label: "Airport Proximity", value: "10 Minutes via Srinagar Highway" },
+      { label: "Apartment Types", value: "Semi-Furnished Studio & 2-Bed Suites" },
+      { label: "Commercial Retail", value: "Double-Height Atrium & Supermarket" },
+      { label: "ROI Potential", value: "High Rental Yield & Short-Term Airbnb Demand" },
+      { label: "Regulatory Status", value: "CDA / ICT Approved Development" },
+    ],
+    paymentPlan: {
+      downPayment: "25% at Booking",
+      installments: "Easy Quarterly & Monthly Installments",
+      possession: "15% on Handover",
+      duration: "Flexible 36-Month Investor Plan",
+    },
+  },
   "manal-arcade": {
     id: "manal-arcade",
     title: "Manal Arcade & Shopping Galleria",
@@ -455,6 +514,40 @@ export function ProjectDetailModal({
                 ))}
               </div>
             </div>
+
+            {/* 3D Video Walkthrough & Virtual Tour (If available) */}
+            {project.videoUrl && (
+              <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card to-primary/10 p-5 shadow-lg">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                      <Sparkles className="w-3 h-3" />
+                      4K 3D Architectural Cinematic
+                    </div>
+                    <h4 className="text-base font-bold text-foreground">
+                      {project.videoTitle || "Experience the 3D Architectural Walkthrough"}
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Watch the high-definition architectural flythrough, retail atrium, and luxury apartment interiors.
+                    </p>
+                  </div>
+                  <Button
+                    asChild
+                    className="min-h-11 shrink-0 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-md gap-2"
+                  >
+                    <a
+                      href={project.videoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Play className="w-4 h-4 fill-black" />
+                      Watch 3D Video
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Payment Schedule Card */}
             <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/5 via-card to-amber-500/5 border border-primary/20">

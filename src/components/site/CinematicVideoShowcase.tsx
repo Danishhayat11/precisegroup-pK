@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import luxuryVillaMargalla from "@/assets/site/luxury-villa-margalla.jpg";
 import commercialTowerNexus from "@/assets/site/commercial-tower-nexus.jpg";
 import luxuryPenthouseSky from "@/assets/site/luxury-penthouse-sky.jpg";
+import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
 
 type VideoScene = {
   id: string;
@@ -31,9 +32,29 @@ type VideoScene = {
   specs: string[];
   description: string;
   viewCount: string;
+  externalVideoUrl?: string;
 };
 
 const SCENES: VideoScene[] = [
+  {
+    id: "manal-heights-3d",
+    projectId: "manal-heights",
+    title: "Manal Heights — H-13 Islamabad",
+    subtitle: "3D Architectural Flythrough & Luxury Suites Showcase",
+    tag: "Manal Heights H-13",
+    duration: "4K HDR · 03:45",
+    image: manalHeightsFacade,
+    specs: [
+      "NUST Service Road H-13",
+      "Semi-Furnished Luxury Suites",
+      "Double-Height Shopping Atrium",
+      "10 Mins from Airport",
+    ],
+    description:
+      "Experience the architectural grandeur of Manal Heights on NUST Service Road: staggered cantilevered balconies with lush planter greenery, double-height shopping arcade, and luxury semi-furnished suites.",
+    viewCount: "14.2K Views",
+    externalVideoUrl: "https://www.facebook.com/share/v/18hJQwxFdK/?mibextid=wwXIfr",
+  },
   {
     id: "villa-tour",
     projectId: "margalla-villa",
@@ -279,18 +300,30 @@ export function CinematicVideoShowcase({
                 </div>
               </div>
 
-              {/* Action Button */}
-              <div className="shrink-0 flex items-center gap-3">
+              {/* Action Buttons */}
+              <div className="shrink-0 flex flex-wrap items-center gap-3">
+                {activeScene.externalVideoUrl && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="bg-black/60 hover:bg-black/80 text-white border-white/30 font-semibold rounded-xl px-4 backdrop-blur-md"
+                  >
+                    <a
+                      href={activeScene.externalVideoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Watch Full 3D Reel</span>
+                    </a>
+                  </Button>
+                )}
+
                 <Button
                   onClick={() => {
                     if (onSelectProject) {
-                      const mapId =
-                        activeScene.id === "villa-tour"
-                          ? "margalla-villa"
-                          : activeScene.id === "nexus-arcade"
-                            ? "manal-arcade"
-                            : "sky-penthouse";
-                      onSelectProject(mapId);
+                      onSelectProject(activeScene.projectId);
                     }
                   }}
                   className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl px-5 shadow-lg"

@@ -28,6 +28,7 @@ import projVilla from "@/assets/site/project-villa.webp";
 import projCommercial from "@/assets/site/project-commercial.webp";
 import projTownhouse from "@/assets/site/project-townhouse.webp";
 import projPenthouse from "@/assets/site/project-penthouse.webp";
+import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
 import teamMushtaqAsset from "@/assets/site/team-mushtaq.jpg.asset.json";
 const teamMushtaq = teamMushtaqAsset.url;
 // Responsive AVIF/WebP variants for Mushtaq's headshot, cropped 4:5 from a
@@ -208,6 +209,15 @@ type Listing = {
 
 const SIGNATURE = [
   {
+    name: "Manal Heights",
+    kind: "Mixed-Use Tower · Shops & Luxury Suites",
+    location: "NUST Service Road, H-13 Islamabad",
+    year: "2026",
+    image: manalHeightsFacade,
+    summary:
+      "Signature mixed-use development on NUST Service Road: double-height shopping atrium, corporate offices & semi-furnished luxury apartments.",
+  },
+  {
     name: "Manal Arcade",
     kind: "Commercial · Landmark",
     location: "B-1 Markaz, B-17 Islamabad",
@@ -215,15 +225,6 @@ const SIGNATURE = [
     image: projArcade,
     summary:
       "A landmark commercial arcade organised around a light-filled retail spine — anchor tenants signed pre-completion.",
-  },
-  {
-    name: "Manal Heights",
-    kind: "Residential · Signature",
-    location: "B-17 Islamabad",
-    year: "In development",
-    image: projTower,
-    summary:
-      "Signature residential development combining architectural discipline with elevated living for Islamabad's premier corridor.",
   },
 ] as const;
 
@@ -513,9 +514,11 @@ function HomePage() {
 
         <div className="grid gap-14 md:grid-cols-2 md:gap-10 lg:gap-16">
           {SIGNATURE.map((p, i) => {
-            const projectKey = p.name.toLowerCase().includes("arcade")
-              ? "manal-arcade"
-              : "sky-penthouse";
+            const projectKey = p.name.toLowerCase().includes("heights")
+              ? "manal-heights"
+              : p.name.toLowerCase().includes("arcade")
+                ? "manal-arcade"
+                : "sky-penthouse";
             return (
               <motion.article
                 key={p.name}

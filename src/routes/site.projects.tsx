@@ -23,6 +23,7 @@ import projArcade from "@/assets/site/project-arcade.webp";
 import luxuryVillaMargalla from "@/assets/site/luxury-villa-margalla.jpg";
 import commercialTowerNexus from "@/assets/site/commercial-tower-nexus.jpg";
 import luxuryPenthouseSky from "@/assets/site/luxury-penthouse-sky.jpg";
+import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
 import { ProjectDetailModal } from "@/components/site/ProjectDetailModal";
 
 import { pageSeo, breadcrumbList } from "@/lib/site-seo";
@@ -74,6 +75,21 @@ type Project = {
 };
 
 const PROJECTS: readonly Project[] = [
+  {
+    id: "manal-heights",
+    name: "Manal Heights — H-13 Islamabad",
+    location: "NUST Service Road, H-13 Islamabad",
+    category: "Mixed-Use",
+    year: "2026",
+    price: "PKR 95 Lacs – 2.85 Cr",
+    priceValueCr: 1.85,
+    beds: 2,
+    baths: 2,
+    areaSqft: 1850,
+    image: manalHeightsFacade,
+    summary:
+      "Prime investment mixed-use tower on NUST Service Road: semi-furnished luxury apartments, shopping atrium & corporate offices with high ROI and student/faculty rental yields.",
+  },
   {
     id: "manal-arcade",
     name: "Manal Arcade & Commercial Hub",
@@ -133,21 +149,6 @@ const PROJECTS: readonly Project[] = [
     image: projTownhouse,
     summary:
       "Limited availability 10-Marla luxury modern family home with internal daylight courtyard, rooftop lounge, and covered garage.",
-  },
-  {
-    id: "manal-heights",
-    name: "Manal Heights Luxury Suites",
-    location: "B-17 Islamabad",
-    category: "Residences",
-    year: "2026",
-    price: "PKR 1.65 Cr – 3.10 Cr",
-    priceValueCr: 2.5,
-    beds: 3,
-    baths: 3,
-    areaSqft: 2100,
-    image: projTower,
-    summary:
-      "Signature residential development combining architectural discipline with elevated living for Islamabad's premier corridor.",
   },
   {
     id: "spanish-villa",
