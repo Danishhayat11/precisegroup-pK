@@ -28,10 +28,10 @@ export const savePushSubscription = createServerFn({ method: "POST" })
     try {
       const { data: prof } = await supabase
         .from("profiles")
-        .select("active_company_id")
+        .select("company_id")
         .eq("id", userId)
         .maybeSingle();
-      companyId = (prof as { active_company_id?: string | null } | null)?.active_company_id ?? null;
+      companyId = (prof as { company_id?: string | null } | null)?.company_id ?? null;
     } catch {
       /* noop */
     }

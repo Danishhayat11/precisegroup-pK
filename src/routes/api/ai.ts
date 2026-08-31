@@ -613,8 +613,8 @@ async function runToolBody(
         // so rollback has a diff to compare against.
         const { data: existingBefore } = await supabase
           .from("payment_comments")
-          .select("id,kind,comment_text,created_at")
-          .eq("receipt_no", receipt_no)
+          .select("id,kind,body,created_at")
+          .eq("payment_receipt_no", receipt_no)
           .order("created_at", { ascending: false })
           .limit(3);
         const beforeState = {
@@ -625,14 +625,16 @@ async function runToolBody(
         const { data: inserted, error } = await supabase
           .from("payment_comments")
           .insert({
-            receipt_no,
+            payment_receipt_no: receipt_no,
             booking_id: (pay as any)?.booking_id ?? null,
-            comment_text,
+            body: comment_text,
             kind,
-            author_user_id: ctx.userId,
-            author_role: "ai_assistant",
+            created_by: ctx.userId,
+            company_id: (pay as any)?.company_id ?? "",
+            source: "ai_assistant",
+            status: "open",
           } as any)
-          .select("id,receipt_no,kind,comment_text,created_at")
+          .select("id,payment_receipt_no,kind,body,created_at")
           .maybeSingle();
         if (error) return { error: error.message };
         const commentId = (inserted as any)?.id ?? null;
@@ -666,20 +668,20 @@ async function runToolBody(
         // Capture whatever review state existed on the row before we stamp it.
         const { data: docBefore } = await supabase
           .from("booking_documents")
-          .select("id,reviewed_at,reviewed_by")
+          .select("id,status,updated_at")
           .eq("id", id)
           .maybeSingle();
         const beforeState = {
           document_id: id,
-          reviewed_at: (docBefore as any)?.reviewed_at ?? null,
-          reviewed_by: (docBefore as any)?.reviewed_by ?? null,
+          status: (docBefore as any)?.status ?? null,
+          updated_at: (docBefore as any)?.updated_at ?? null,
         };
         const now = new Date().toISOString();
         const { error } = await (supabase.from("booking_documents") as any)
-          .update({ reviewed_at: now, reviewed_by: ctx.userId })
+          .update({ status: "reviewed", updated_at: now })
           .eq("id", id);
         if (error) return { error: error.message };
-        const afterState = { document_id: id, reviewed_at: now, reviewed_by: ctx.userId };
+        const afterState = { document_id: id, status: "reviewed", updated_at: now };
         const actionId = await logAction(supabase, ctx, {
           tool_name: name,
           target_kind: "booking_document",
@@ -697,9 +699,9 @@ async function runToolBody(
             target: `Document ${id}`,
             before: beforeState,
             after: afterState,
-            rollback_hint: beforeState.reviewed_at
-              ? "Restores the previous reviewed_at / reviewed_by values."
-              : "Clears reviewed_at and reviewed_by back to null.",
+            rollback_hint: beforeState.status
+              ? "Restores the previous document status."
+              : "Clears document status back to null.",
           },
         };
       }

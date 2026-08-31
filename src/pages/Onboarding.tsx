@@ -139,7 +139,7 @@ export default function Onboarding() {
     if (!companyId || target === 0) return 0;
     const { count: projectCount, error: pErr } = await supabase
       .from("projects")
-      .select("id", { count: "exact", head: true })
+      .select("project_code", { count: "exact", head: true })
       .eq("company_id", companyId);
     if (pErr || !projectCount || projectCount < 1) return 0;
     if (target === 1) return 1;

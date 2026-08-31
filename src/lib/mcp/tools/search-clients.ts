@@ -40,8 +40,8 @@ export default defineTool({
     const like = `%${escapedQuery}%`;
     const { data, error } = await sb
       .from("clients")
-      .select("client_ref, client_name, cnic, mobile, address")
-      .or(`client_name.ilike.${like},cnic.ilike.${like},mobile.ilike.${like}`)
+      .select("client_ref, name, cnic, mobile, address")
+      .or(`name.ilike.${like},cnic.ilike.${like},mobile.ilike.${like}`)
       .limit(25);
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     return {

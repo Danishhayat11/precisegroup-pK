@@ -27,7 +27,7 @@ export const Route = createFileRoute("/api/public/push-installments-due")({
         // can identify one; otherwise all company members with subscriptions.
         const { data: rows, error } = await supabaseAdmin
           .from("installment_ledger")
-          .select("id, booking_id, due_date, amount, bookings ( company_id )")
+          .select("ledger_id, booking_id, due_date, due_amount, bookings ( company_id )")
           .gte("due_date", start.toISOString().slice(0, 10))
           .lt("due_date", end.toISOString().slice(0, 10))
           .limit(500);

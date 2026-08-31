@@ -267,8 +267,8 @@ async function runSearch(
           .abortSignal(signal!),
         supabase
           .from("payments")
-          .select("payment_id,booking_id,amount,payment_date,payment_mode")
-          .or(`payment_id.ilike.${like},booking_id.ilike.${like},payment_mode.ilike.${like}`)
+          .select("receipt_no,booking_id,amount,payment_date,payment_mode")
+          .or(`receipt_no.ilike.${like},booking_id.ilike.${like},payment_mode.ilike.${like}`)
           .limit(8)
           .abortSignal(signal!),
       ]
@@ -786,20 +786,20 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
               <CommandGroup heading="Payments">
                 {results.payments.map((p: any) => {
                   const matches = matchedFields(debounced, [
-                    { label: "payment id", value: p.payment_id },
+                    { label: "receipt no", value: p.receipt_no },
                     { label: "booking id", value: p.booking_id },
                     { label: "mode", value: p.payment_mode },
                   ]);
                   return (
                     <CommandItem
-                      key={`p-${p.payment_id}`}
-                      value={`payment ${p.payment_id} ${p.booking_id} ${p.payment_mode ?? ""}`}
+                      key={`p-${p.receipt_no}`}
+                      value={`payment ${p.receipt_no} ${p.booking_id} ${p.payment_mode ?? ""}`}
                       onSelect={() => go(`/payments`)}
                     >
                       <Receipt className="mr-2 h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="flex flex-col min-w-0">
                         <span className="font-medium truncate">
-                          <Highlight text={p.payment_id} query={debounced} />
+                          <Highlight text={p.receipt_no} query={debounced} />
                         </span>
                         <span className="text-xs text-muted-foreground truncate">
                           {"Booking "}

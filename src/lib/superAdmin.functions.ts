@@ -720,7 +720,7 @@ export const superAdminAiReviewCompany = createServerFn({ method: "POST" })
         .eq("company_id", data.company_id),
       supabaseAdmin
         .from("bookings")
-        .select("id", { count: "exact", head: true })
+        .select("booking_id", { count: "exact", head: true })
         .eq("company_id", data.company_id),
     ]);
     if (!co) throw new Error("Company not found");

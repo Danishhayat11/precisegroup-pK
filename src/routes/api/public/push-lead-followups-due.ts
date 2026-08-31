@@ -22,9 +22,9 @@ export const Route = createFileRoute("/api/public/push-lead-followups-due")({
 
         const { data: leads, error } = await supabaseAdmin
           .from("crm_leads")
-          .select("id, name, next_action_at, assigned_to, company_id")
-          .gte("next_action_at", today.toISOString())
-          .lt("next_action_at", end.toISOString())
+          .select("id, full_name, follow_up_date, assigned_to, company_id")
+          .gte("follow_up_date", today.toISOString().slice(0, 10))
+          .lt("follow_up_date", end.toISOString().slice(0, 10))
           .limit(500);
         if (error)
           return new Response(JSON.stringify({ error: error.message }), {

@@ -58,7 +58,7 @@ function makeSupabase(opts: { activeCompanyId: string | null; upsertError?: stri
           select: () => ({
             eq: () => ({
               maybeSingle: async () => ({
-                data: { active_company_id: opts.activeCompanyId },
+                data: { company_id: opts.activeCompanyId, active_company_id: opts.activeCompanyId },
                 error: null,
               }),
             }),
