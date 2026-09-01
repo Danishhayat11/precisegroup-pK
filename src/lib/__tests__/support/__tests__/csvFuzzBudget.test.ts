@@ -46,7 +46,7 @@ describe("runWithBudget — hard perf ceiling", () => {
         // 20ms per iter × 3 = 60ms — way over the hard limit.
         run: () => {
           const stop = performance.now() + 20;
-          // eslint-disable-next-line no-empty
+
           while (performance.now() < stop) {}
         },
       }),
@@ -65,7 +65,7 @@ describe("runWithBudget — hard perf ceiling", () => {
       hardLimitFactor: 10,
       run: () => {
         const stop = performance.now() + 5;
-        // eslint-disable-next-line no-empty
+
         while (performance.now() < stop) {}
       },
     });
@@ -99,7 +99,7 @@ describe("runWithBudget — env multipliers", () => {
     // multiplier finished FEWER iterations.
     const slow = () => {
       const stop = performance.now() + 1;
-      // eslint-disable-next-line no-empty
+
       while (performance.now() < stop) {}
     };
     delete process.env.CSV_FUZZ_BUDGET_MS_MULT;

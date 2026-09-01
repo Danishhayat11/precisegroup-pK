@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { generateText, Output, NoObjectGeneratedError } from "ai";

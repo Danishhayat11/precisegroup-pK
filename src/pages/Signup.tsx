@@ -154,7 +154,7 @@ export default function Signup() {
 
       toast.success("Application submitted — a Super Admin will approve your workspace shortly.");
       navigate("/pending-approval");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     } catch (err: any) {
       toastError(err, "Could not create your account", { retry: () => void submit() });
     } finally {
