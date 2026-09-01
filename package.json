@@ -87,7 +87,8 @@
     "test:a11y:responsive": "playwright test tests/a11y/responsive-breakpoints.spec.ts --project=chromium-reduced-motion",
     "test:perf:lcp": "node scripts/perf/lcp-budget.mjs",
     "test:csv:property": "vitest run src/lib/__tests__/csvExportMetadataProperty.test.ts src/lib/__tests__/csvExportMetadataFuzz.test.ts src/lib/__tests__/csvExportMetadataLargeFuzzPerf.test.ts src/lib/__tests__/csvExportMetadataPermutationFuzz.test.ts src/lib/__tests__/csvExportMetadataWideFuzz.test.ts src/lib/__tests__/csvMetadataHeaderRoundTripProperty.test.ts src/lib/__tests__/csvExportEscapingFuzz.test.ts src/lib/__tests__/csvJsonMetadataShapeFuzz.test.ts src/lib/__tests__/support/__tests__/fuzzReporter.test.ts",
-    "test:csv:property:nightly": "FC_RUNS_MULTIPLIER=20 vitest run src/lib/__tests__/csvExportMetadataProperty.test.ts src/lib/__tests__/csvExportMetadataFuzz.test.ts src/lib/__tests__/csvExportMetadataLargeFuzzPerf.test.ts src/lib/__tests__/csvExportMetadataPermutationFuzz.test.ts src/lib/__tests__/csvExportMetadataWideFuzz.test.ts src/lib/__tests__/csvMetadataHeaderRoundTripProperty.test.ts src/lib/__tests__/csvExportEscapingFuzz.test.ts src/lib/__tests__/csvJsonMetadataShapeFuzz.test.ts src/lib/__tests__/support/__tests__/fuzzReporter.test.ts"
+    "test:csv:property:nightly": "FC_RUNS_MULTIPLIER=20 vitest run src/lib/__tests__/csvExportMetadataProperty.test.ts src/lib/__tests__/csvExportMetadataFuzz.test.ts src/lib/__tests__/csvExportMetadataLargeFuzzPerf.test.ts src/lib/__tests__/csvExportMetadataPermutationFuzz.test.ts src/lib/__tests__/csvExportMetadataWideFuzz.test.ts src/lib/__tests__/csvMetadataHeaderRoundTripProperty.test.ts src/lib/__tests__/csvExportEscapingFuzz.test.ts src/lib/__tests__/csvJsonMetadataShapeFuzz.test.ts src/lib/__tests__/support/__tests__/fuzzReporter.test.ts",
+    "backup": "bash backup.sh"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.5",

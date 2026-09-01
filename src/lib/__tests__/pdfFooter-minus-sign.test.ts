@@ -9,7 +9,7 @@ import { stampFormulaFooter, type JsPdfLike } from "@/lib/pdfFooter";
 
 const MINUS = "\u2212";
 const HYPHEN = "-";
-const FORMULA = `Total Received = Cash + Adjustment Realised ${MINUS} Commission Paid`;
+const FORMULA = `Total Received = Cash + Adjustment Approved ${MINUS} Commission Paid`;
 
 function makeFakePdf(pageCount: number) {
   const calls: Array<{ page: number; text: string }> = [];

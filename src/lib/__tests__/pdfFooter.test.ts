@@ -25,7 +25,7 @@ function makeFakePdf(pageCount: number) {
   return pdf;
 }
 
-const FORMULA = "Total Received = Cash + Adjustment Realised \u2212 Commission Paid";
+const FORMULA = "Total Received = Cash + Adjustment Approved \u2212 Commission Paid";
 
 describe("stampFormulaFooter — every-page coverage", () => {
   it("stamps the formula note on every page of a single-page PDF", () => {

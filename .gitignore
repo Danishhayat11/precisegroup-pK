@@ -35,3 +35,8 @@ dist-ssr
 .axe-snapshots/
 reports/
 .vercel
+.fuzz-seed-store/
+test-results/
+precise-erp-standalone.zip
+zixCJbkR
+

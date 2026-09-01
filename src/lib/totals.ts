@@ -2,10 +2,8 @@
 // Total Received identity (Cash − Adjustment Approved − Commission) can be
 // verified by automated tests independent of the React component.
 //
-// Business rule: Adjustments (asset-in-lieu / write-offs credited to the
-// client) are NOT cash received. The full approved adjustment amount is
-// deducted from Total Received. Adj. Realised remains as a separate KPI
-// for reporting only.
+// Business rule: Total Received = Cash/Bank + Adjustment Approved - Commission Paid.
+// Adj. Realised remains as a separate KPI for reporting only.
 
 export type BookingLike = { dealer_commission_amount?: number | string | null };
 export type PaymentLike = { safe_cash_amount?: number | string | null };
@@ -36,9 +34,7 @@ export function sumCommissionPaid(bookings: BookingLike[]): number {
 }
 
 /**
- * Total Received (Net Company View) = Cash/Bank − Adjustment Approved − Commission Paid.
- * Adjustments are treated as write-offs against the client's balance and do
- * NOT add to Total Received.
+ * Total Received (Net Company View) = Cash/Bank + Adjustment Approved − Commission Paid.
  */
 export function computeTotalReceived(input: {
   bookings: BookingLike[];
@@ -56,11 +52,9 @@ export function computeTotalReceived(input: {
   const adjApproved = sumAdjApproved(input.adjustments);
   const commissionPaid = sumCommissionPaid(input.bookings);
 
-  // Business Rule: Total Received = Cash − Adjustment Approved − Commission Paid.
-  // Adjustments are write-offs against the client's balance — the full approved
-  // value is deducted. adjRealised is tracked separately for reporting only.
+  // Business Rule: Total Received = Cash/Bank + Adjustment Approved − Commission Paid.
   // We use strict 2-decimal rounding to prevent floating-point drift.
-  const val = cashRecovered - adjApproved - commissionPaid;
+  const val = cashRecovered + adjApproved - commissionPaid;
   const totalReceived = Math.round((val + Number.EPSILON) * 100) / 100;
 
   return {
