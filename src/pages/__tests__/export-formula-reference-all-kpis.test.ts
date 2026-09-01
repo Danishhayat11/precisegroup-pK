@@ -43,7 +43,7 @@ describe("Dashboard exports — formula reference for all monetary KPIs", () => 
     expect(start).toBeGreaterThan(-1);
     const block = SRC.slice(start, start + 1200);
     expect(block).toMatch(
-      /received:\s*\{\s*short:\s*"Cash \+ Asset Realized − Commission Paid"/,
+      /received:\s*\{\s*short:\s*"Cash\/Bank \+ Asset Realized − Commission Paid"/,
     );
     // each of the four keys must be present
     for (const key of ["cash", "adj_realised", "commission", "received"]) {
