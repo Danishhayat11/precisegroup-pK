@@ -50,7 +50,7 @@ import sora700Woff2 from "@fontsource/sora/files/sora-latin-700-normal.woff2?url
 import inter400Woff2 from "@fontsource/inter/files/inter-latin-400-normal.woff2?url";
 import inter700Woff2 from "@fontsource/inter/files/inter-latin-700-normal.woff2?url";
 
-import { reportLovableError } from "../lib/lovable-error-reporting";
+
 import { useAutoRetry } from "../lib/useAutoRetry";
 import { getOrCreateErrorId } from "../lib/error-id";
 import { ErrorRef } from "../components/ErrorRef";
@@ -68,8 +68,6 @@ import {
   THEME_COLOR_LIGHT,
   THEME_COLOR_META_ID,
 } from "@/lib/theme";
-import { LOVABLE_BADGE_PURGE_SCRIPT } from "@/lib/lovable-badge-purge";
-import { ENV_DEFAULT_HIDE_BADGE, applyLovableBadgeAttribute } from "@/lib/lovable-badge-runtime";
 
 function NotFoundComponent() {
   const router = useRouter();
@@ -123,9 +121,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
+
 
   const auto = useAutoRetry({
     onRetry: () => {
@@ -322,13 +318,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           inLanguage: "en-PK",
         }),
       },
-      {
-        // Runtime purge for the Lovable branding badge, including any
-        // instance mounted inside an open shadow root. Gated by
-        // `<html data-hide-lovable-badge="true">` so it mirrors the CSS
-        // override's env flag. See src/lib/lovable-badge-purge.ts.
-        children: LOVABLE_BADGE_PURGE_SCRIPT,
-      },
+
     ],
   }),
   shellComponent: RootShell,
@@ -343,21 +333,10 @@ function RootShell({ children }: { children: ReactNode }) {
   // pre-hydration script (THEME_INIT_SCRIPT) mutates the live DOM to the
   // stored/system theme before React hydrates; `suppressHydrationWarning`
   // permits that intentional DOM-vs-vdom divergence on <html>.
-  // Lovable branding-badge toggle. The build-time env value
-  // (`VITE_HIDE_LOVABLE_BADGE`) drives the SSR attribute so the HTML matches
-  // between server and client on first render (no hydration flicker). At
-  // runtime, `applyLovableBadgeAttribute()` may overwrite the attribute
-  // based on the per-browser override in localStorage — see
-  // src/lib/lovable-badge-runtime.ts and the admin toggle at
-  // /admin/lovable-badge. Default = hidden.
-  useEffect(() => {
-    applyLovableBadgeAttribute();
-  }, []);
   return (
     <html
       lang="en-PK"
       suppressHydrationWarning
-      data-hide-lovable-badge={ENV_DEFAULT_HIDE_BADGE ? "true" : "false"}
     >
       <head suppressHydrationWarning>
         {/* suppressHydrationWarning on <head> silences a dev-only

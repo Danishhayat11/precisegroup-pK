@@ -77,7 +77,7 @@ describe.each([
     expect(img).not.toBeNull();
     expect(img!.getAttribute("alt")).toBe(alt);
     expect(img!.className).toMatch(/opacity-0/);
-    expect(img!.className).toMatch(/transition-\[opacity,transform\]/);
+    expect(img!.className).toMatch(/transition-all/);
     expect(img!.className).toMatch(/duration-700/);
 
     // 3. Fire the load event the browser would fire once AVIF/WebP decodes.
@@ -96,7 +96,7 @@ describe.each([
     const imgAfter = container.querySelector("img")!;
     expect(imgAfter.className).toMatch(/opacity-100/);
     expect(imgAfter.className).not.toMatch(/opacity-0/);
-    expect(imgAfter.className).toMatch(/transition-\[opacity,transform\]/);
+    expect(imgAfter.className).toMatch(/transition-all/);
   });
 
   it("keeps the LQIP layer non-interactive and hidden from assistive tech", () => {
@@ -158,7 +158,15 @@ describe("LQIP fade-out — no LQIP provided", () => {
     );
     expect(queryLqipLayer(container)).toBeNull();
     const img = container.querySelector("img")!;
-    // Without an LQIP, there's nothing to fade into — image is visible from t=0.
+    // Without an LQIP, it still starts transparent to reveal the skeleton shimmer,
+    // and fades in once loaded.
+    expect(img.className).toMatch(/opacity-0/);
+    expect(img.className).not.toMatch(/opacity-100/);
+    
+    act(() => {
+      fireEvent.load(img);
+    });
+
     expect(img.className).toMatch(/opacity-100/);
     expect(img.className).not.toMatch(/opacity-0/);
   });

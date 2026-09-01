@@ -258,12 +258,14 @@ export function PaymentForm({ initial, onSaved, onCancel }: PaymentFormProps) {
   };
 
   const handleSave = async () => {
+    console.log("HANDLE SAVE CALLED");
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       const errs: Record<string, string> = {};
       parsed.error.issues.forEach((i) => {
         errs[i.path.join(".")] = i.message;
       });
+      console.log("PAYMENT FORM VALIDATION FAILED:", errs);
       setErrors(errs);
       toast({ variant: "destructive", title: "Please fix the highlighted fields" });
       return;

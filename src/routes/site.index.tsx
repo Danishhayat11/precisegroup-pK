@@ -7,7 +7,7 @@
  *   - Team: Engr. Danish Hayat (Engineering & Business Operations),
  *           Saeed ullah (Sales & Client Relations)
  *   - Office: Plot #04, First Floor, Manal Arcade, B-1 Markaz, B-17
- *     Islamabad · +92 344 5533767 · mushtaq@precisegroup.pk
+ *     Islamabad · +92 344 5533767 · danishhayat706@gmail.com
  *   - Core Services: Property Acquisition, Investment Advisory, Property
  *     Management, Architecture & Design, Legal Consultation, Market
  *     Research, Marketing
@@ -41,6 +41,7 @@ import projTownhouse from "@/assets/site/project-townhouse.webp";
 import projPenthouse from "@/assets/site/project-penthouse.webp";
 import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
 import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
+import manalHeightsUltra from "@/assets/site/manal-heights-ultra.jpg";
 import teamMushtaqAsset from "@/assets/site/team-mushtaq.jpg.asset.json";
 const teamMushtaq = teamMushtaqAsset.url;
 // Responsive AVIF/WebP variants for Mushtaq's headshot, cropped 4:5 from a
@@ -140,7 +141,7 @@ export const Route = createFileRoute("/site/")({
             image: `${SITE_BASE_URL}/og-cover.jpg`,
             logo: `${SITE_BASE_URL}/favicon-512.png`,
             telephone: "+92 344 5533767",
-            email: "mushtaq@precisegroup.pk",
+            email: "danishhayat706@gmail.com",
             address: {
               "@type": "PostalAddress",
               streetAddress: "Plot #04, First Floor, Manal Arcade, B-1 Markaz",
@@ -225,7 +226,7 @@ const SIGNATURE = [
     kind: "Mixed-Use Tower · Shops & Luxury Suites",
     location: "NUST Service Road, H-13 Islamabad",
     year: "2026",
-    image: manalHeightsPoster,
+    image: manalHeightsUltra,
     summary:
       "Signature mixed-use development on NUST Service Road: double-height shopping atrium, corporate offices & semi-furnished luxury apartments.",
   },
@@ -891,10 +892,10 @@ function HomePage() {
             <div className="flex items-start gap-3">
               <Mail className="mt-1 h-4 w-4 shrink-0 text-[var(--gold)]" aria-hidden />
               <a
-                href="mailto:mushtaq@precisegroup.pk"
+                href="mailto:danishhayat706@gmail.com"
                 className="hover:text-[var(--gold)] transition-colors"
               >
-                mushtaq@precisegroup.pk
+                danishhayat706@gmail.com
               </a>
             </div>
             <Link

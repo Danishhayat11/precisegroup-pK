@@ -280,8 +280,8 @@ function ContactPage() {
               <ContactRow
                 icon={Mail}
                 label="Email"
-                primary="mushtaq@precisegroup.pk"
-                href="mailto:mushtaq@precisegroup.pk"
+                primary="danishhayat706@gmail.com"
+                href="mailto:danishhayat706@gmail.com"
               />
               <ContactRow
                 icon={MapPin}

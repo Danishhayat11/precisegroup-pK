@@ -8,19 +8,15 @@ import {
   VolumeX,
   Maximize2,
   Sparkles,
-  Building2,
   Compass,
   ArrowRight,
   Eye,
-  CheckCircle2,
-  Layers,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import luxuryVillaMargalla from "@/assets/site/luxury-villa-margalla.jpg";
 import commercialTowerNexus from "@/assets/site/commercial-tower-nexus.jpg";
 import luxuryPenthouseSky from "@/assets/site/luxury-penthouse-sky.jpg";
-import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
-import manalHeightsElevation from "@/assets/site/manal-heights-actual-elevation.jpg";
 import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
 
 type VideoScene = {
@@ -122,8 +118,14 @@ export function CinematicVideoShowcase({
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [showEmbed, setShowEmbed] = useState(false);
 
   const activeScene = SCENES[activeSceneIdx];
+
+  // Reset embed state when switching scenes
+  useEffect(() => {
+    setShowEmbed(false);
+  }, [activeSceneIdx]);
 
   // Simulated playback progression
   useEffect(() => {
@@ -262,17 +264,55 @@ export function CinematicVideoShowcase({
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={() => {
+                if (activeScene.externalVideoUrl) {
+                  setShowEmbed(true);
+                } else {
+                  setIsPlaying(!isPlaying);
+                }
+              }}
               className="pointer-events-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black flex items-center justify-center shadow-[0_0_40px_rgba(201,168,76,0.5)] transition-colors backdrop-blur-sm"
-              aria-label={isPlaying ? "Pause walkthrough" : "Play walkthrough"}
+              aria-label={activeScene.externalVideoUrl ? "Watch 3D Video" : (isPlaying ? "Pause walkthrough" : "Play walkthrough")}
             >
-              {isPlaying ? (
+              {!activeScene.externalVideoUrl && isPlaying ? (
                 <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-black" />
               ) : (
                 <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-black translate-x-0.5" />
               )}
             </motion.button>
           </div>
+
+          {/* Actual Video Embed Overlay */}
+          <AnimatePresence>
+            {showEmbed && activeScene.externalVideoUrl && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 bg-black flex items-center justify-center"
+              >
+                <button
+                  onClick={() => setShowEmbed(false)}
+                  className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 backdrop-blur-md transition-all"
+                  aria-label="Close video"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <iframe
+                  src={`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(
+                    activeScene.externalVideoUrl
+                  )}&show_text=false&width=auto`}
+                  className="w-full h-full border-none shadow-2xl"
+                  style={{ border: "none", overflow: "hidden" }}
+                  scrolling="no"
+                  frameBorder="0"
+                  allowFullScreen={true}
+                  allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                  title={activeScene.title}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Bottom Info & Video Scrubber Bar */}
           <div className="absolute bottom-0 inset-x-0 p-5 sm:p-8 text-white z-20">
@@ -306,19 +346,12 @@ export function CinematicVideoShowcase({
               <div className="shrink-0 flex flex-wrap items-center gap-3">
                 {activeScene.externalVideoUrl && (
                   <Button
-                    asChild
+                    onClick={() => setShowEmbed(true)}
                     variant="outline"
-                    className="bg-black/60 hover:bg-black/80 text-white border-white/30 font-semibold rounded-xl px-4 backdrop-blur-md"
+                    className="bg-black/60 hover:bg-black/80 text-white border-white/30 font-semibold rounded-xl px-4 backdrop-blur-md inline-flex items-center gap-1.5"
                   >
-                    <a
-                      href={activeScene.externalVideoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>Watch Full 3D Reel</span>
-                    </a>
+                    <Play className="w-3.5 h-3.5 fill-white" />
+                    <span>Watch Full 3D Reel</span>
                   </Button>
                 )}
 

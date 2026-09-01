@@ -160,6 +160,11 @@ interface BookingFormProps {
   onCancel: () => void;
 }
 
+type UnitType = (typeof UNIT_TYPES)[number];
+type Floor = (typeof FLOORS)[number];
+type Frequency = (typeof FREQUENCIES)[number];
+type BookingStatus = (typeof STATUSES)[number];
+
 const defaultsFor = (
   initial?: Partial<BookingFormValue>,
   fallbackProject?: { project_code: string; project_name: string } | null,
@@ -171,8 +176,8 @@ const defaultsFor = (
   project_code: initial?.project_code ?? fallbackProject?.project_code ?? "",
   project_name: initial?.project_name ?? fallbackProject?.project_name ?? "",
   unit_id: initial?.unit_id ?? "",
-  unit_type: (initial?.unit_type as any) ?? "Apartment",
-  floor: (initial?.floor as any) ?? "Ground",
+  unit_type: (initial?.unit_type as UnitType | undefined) ?? "Apartment",
+  floor: (initial?.floor as Floor | undefined) ?? "Ground",
   size_sqft: Number(initial?.size_sqft ?? 0),
   client_name: initial?.client_name ?? "",
   so_wo: initial?.so_wo ?? "",
@@ -188,10 +193,10 @@ const defaultsFor = (
   adjustment_credit: Number(initial?.adjustment_credit ?? 0),
   possession_amount: Number(initial?.possession_amount ?? 0),
   no_of_installments: Number(initial?.no_of_installments ?? 0),
-  installment_frequency: (initial?.installment_frequency as any) ?? "Quarterly",
+  installment_frequency: (initial?.installment_frequency as Frequency | undefined) ?? "Quarterly",
   installment_amount: Number(initial?.installment_amount ?? 0),
   first_installment_due: initial?.first_installment_due ?? "",
-  booking_status: (initial?.booking_status as any) ?? "Active",
+  booking_status: (initial?.booking_status as BookingStatus | undefined) ?? "Active",
   notes: initial?.notes ?? "",
 });
 
@@ -307,7 +312,8 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
         .select("unit_id, unit_type, floor, size_sqft, base_rate, status, linked_booking_id")
         .eq("project_code", form.project_code)
         .order("unit_id", { ascending: true });
-      const rows = (data ?? []) as any[];
+      type UnitRow = { unit_id: string; unit_type: string; floor: string; size_sqft: number | null; base_rate: number | null; status: string | null; linked_booking_id: string | null };
+      const rows = (data ?? []) as UnitRow[];
       return rows.filter(
         (u) =>
           u.unit_id === initial?.unit_id ||
@@ -391,7 +397,7 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
     setFormError(null);
   };
   const setNum = (k: keyof BookingFormValue) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    set(k, Number(e.target.value || 0) as any);
+    set(k, Number(e.target.value || 0) as BookingFormValue[typeof k]);
 
   // Live validity — same schema + cross-field rules as handleSave, so the
   // mobile submit button (which is the primary way users complete this form
@@ -733,7 +739,7 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
             <Select
               value={form.unit_id}
               onValueChange={(id) => {
-                const u = (availableUnits as any[]).find((x) => x.unit_id === id);
+                const u = availableUnits.find((x: { unit_id: string; unit_type?: string; floor?: string; size_sqft?: number | null; base_rate?: number | null }) => x.unit_id === id);
                 if (!u) {
                   set("unit_id", id);
                   return;
@@ -741,10 +747,12 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
                 setForm((f) => ({
                   ...f,
                   unit_id: u.unit_id,
-                  unit_type: (UNIT_TYPES as readonly string[]).includes(u.unit_type)
-                    ? u.unit_type
+                  unit_type: (UNIT_TYPES as readonly string[]).includes(u.unit_type ?? "")
+                    ? (u.unit_type as UnitType)
                     : f.unit_type,
-                  floor: (FLOORS as readonly string[]).includes(u.floor) ? u.floor : f.floor,
+                  floor: (FLOORS as readonly string[]).includes(u.floor ?? "")
+                    ? (u.floor as Floor)
+                    : f.floor,
                   size_sqft: Number(u.size_sqft ?? f.size_sqft),
                   sold_rate: f.sold_rate || Number(u.base_rate ?? 0),
                 }));
@@ -758,12 +766,12 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
                 />
               </SelectTrigger>
               <SelectContent>
-                {(availableUnits as any[]).length === 0 ? (
+                {availableUnits.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-muted-foreground">
                     No available units in this project.
                   </div>
                 ) : (
-                  (availableUnits as any[]).map((u) => (
+                  availableUnits.map((u: { unit_id: string; unit_type?: string; floor?: string; size_sqft?: number | null }) => (
                     <SelectItem key={u.unit_id} value={u.unit_id}>
                       {u.unit_id} — {u.unit_type} · {u.floor} · {u.size_sqft} sqft
                     </SelectItem>
@@ -775,7 +783,7 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
           </div>
           <div>
             <Label>Unit Type *</Label>
-            <Select value={form.unit_type} onValueChange={(v) => set("unit_type", v as any)}>
+            <Select value={form.unit_type} onValueChange={(v) => set("unit_type", v as UnitType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -790,7 +798,7 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
           </div>
           <div>
             <Label>Floor *</Label>
-            <Select value={form.floor} onValueChange={(v) => set("floor", v as any)}>
+            <Select value={form.floor} onValueChange={(v) => set("floor", v as Floor)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -1035,7 +1043,7 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
             <Label>Frequency</Label>
             <Select
               value={form.installment_frequency}
-              onValueChange={(v) => set("installment_frequency", v as any)}
+              onValueChange={(v) => set("installment_frequency", v as Frequency)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -1112,7 +1120,7 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
           <Label>Status</Label>
           <Select
             value={form.booking_status}
-            onValueChange={(v) => set("booking_status", v as any)}
+            onValueChange={(v) => set("booking_status", v as BookingStatus)}
           >
             <SelectTrigger>
               <SelectValue />

@@ -1,0 +1,68 @@
+{
+  "property": "csv round-trip",
+  "mode": "property",
+  "invariant": "row values survive CSV → JSON round-trip byte-for-byte",
+  "failed": true,
+  "interrupted": false,
+  "numRuns": 1,
+  "numShrinks": 0,
+  "numSkips": 0,
+  "seed": 42,
+  "counterexamplePath": "0",
+  "argNames": [
+    "headerColumns",
+    "rows",
+    "explicitKeys"
+  ],
+  "argFields": {
+    "headerColumns": "",
+    "rows": [
+      {
+        "a": 1
+      },
+      {
+        "a": 2
+      }
+    ],
+    "explicitKeys": ""
+  },
+  "offendingField": "rows",
+  "counterexamplePretty": [
+    "\"\"",
+    "[{ \"a\": 1 }, { \"a\": 2 }]",
+    "\"\""
+  ],
+  "counterexampleRaw": [
+    "",
+    [
+      {
+        "a": 1
+      },
+      {
+        "a": 2
+      }
+    ],
+    ""
+  ],
+  "lastSamples": [
+    [
+      "",
+      [
+        {
+          "a": 1
+        },
+        {
+          "a": 2
+        }
+      ],
+      ""
+    ]
+  ],
+  "errorMessage": "Property failed by returning false",
+  "testFile": "src/lib/__tests__/support/__tests__/fuzzReporter.test.ts",
+  "shellReproduce": "node scripts/ci/fuzz-replay.mjs --seed 42 --path 0 --file /Users/danishhayat/Desktop/precisegroup-pk-main/src/lib/__tests__/support/__tests__/fuzzReporter.test.ts --name \"csv round-trip\"",
+  "reproduce": "fc.assert(<property>, { seed: 42, path: \"0\", endOnFailure: true })",
+  "writtenAt": "2026-08-31T22:00:38.971Z",
+  "renderedInputFiles": [],
+  "renderedInputsPreview": {}
+}

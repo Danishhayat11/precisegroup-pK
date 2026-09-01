@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { fmtPKR } from "@/lib/format";
 import manalHeightsElevation from "@/assets/site/manal-heights-actual-elevation.jpg";
+import manalHeightsUltra from "@/assets/site/manal-heights-ultra.jpg";
 import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
 import manalHeightsAtriumActual from "@/assets/site/manal-heights-actual-atrium.jpg";
 import manalHeightsFloorplanActual from "@/assets/site/manal-heights-actual-floorplan.jpg";
@@ -76,6 +77,7 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     videoUrl: "https://www.facebook.com/share/v/18hJQwxFdK/?mibextid=wwXIfr",
     videoTitle: "Official 3D Architectural Reel & Building Showcase",
     images: [
+      manalHeightsUltra,
       manalHeightsElevation,
       manalHeightsPoster,
       manalHeightsAtriumActual,
@@ -312,6 +314,115 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
       duration: "Fast-Track Handover",
     },
   },
+  "fb-project-1": {
+    id: "fb-project-1",
+    title: "Modern High-Rise Apartment [Mock Data]",
+    category: "residential",
+    type: "Luxury Apartment",
+    location: "Downtown Commercial District",
+    subLocation: "City Center",
+    price: "PKR 4.50 Cr",
+    sqft: "1,500 sq.ft",
+    beds: 3,
+    baths: 3,
+    floors: "12th Floor",
+    completion: "Ready to Move",
+    status: "Available",
+    images: [
+      "/src/assets/site/project-tower.webp"
+    ],
+    description: "This is a placeholder description for a real project from Facebook. You can replace this text with the actual project details, highlights, and amenities later. It serves as a visual layout reference.",
+    highlights: [
+      "[Placeholder Highlight 1: e.g. Smart Home Features]",
+      "[Placeholder Highlight 2: e.g. Panoramic City Views]",
+      "[Placeholder Highlight 3: e.g. Dedicated Parking]"
+    ],
+    amenities: [
+      "[Placeholder Amenity 1: Swimming Pool]",
+      "[Placeholder Amenity 2: Gym]",
+      "[Placeholder Amenity 3: 24/7 Security]"
+    ],
+    specs: [
+      { label: "Plot Size", value: "N/A" },
+      { label: "Built-up Area", value: "1,500 sq. ft." }
+    ],
+    paymentPlan: {
+      downPayment: "20% Initial Payment",
+      installments: "48 Monthly Installments",
+      possession: "On Completion",
+      duration: "4 Years"
+    }
+  },
+  "fb-project-2": {
+    id: "fb-project-2",
+    title: "Luxury Commercial Complex [Mock Data]",
+    category: "commercial",
+    type: "Commercial Hub",
+    location: "Main Boulevard",
+    subLocation: "Financial District",
+    price: "PKR 12.0 Cr",
+    sqft: "5,000 sq.ft",
+    floors: "Ground + 2",
+    completion: "Under Construction",
+    status: "Booking Open",
+    images: [
+      "/src/assets/site/project-commercial.webp"
+    ],
+    description: "This is another placeholder for a Facebook project. Replace this description with the real commercial project details, ensuring the structure matches your luxury brand.",
+    highlights: [
+      "[Placeholder Highlight: High Footfall Area]",
+      "[Placeholder Highlight: Corner Plot Advantage]"
+    ],
+    amenities: [
+      "[Placeholder Amenity: Backup Generators]",
+      "[Placeholder Amenity: High Speed Elevators]"
+    ],
+    specs: [
+      { label: "Commercial Area", value: "5,000 sq. ft." }
+    ],
+    paymentPlan: {
+      downPayment: "30% Initial Payment",
+      installments: "Quarterly Installments",
+      possession: "2027",
+      duration: "3 Years"
+    }
+  },
+  "fb-project-3": {
+    id: "fb-project-3",
+    title: "Exclusive Suburb Villa [Mock Data]",
+    category: "luxury",
+    type: "Signature Villa",
+    location: "Premium Golf Estate",
+    subLocation: "Phase 1",
+    price: "PKR 9.50 Cr",
+    sqft: "4,000 sq.ft",
+    beds: 5,
+    baths: 6,
+    floors: "Basement + Ground + 1",
+    completion: "Ready for Possession",
+    status: "Sold Out",
+    images: [
+      "/src/assets/site/project-villa.webp"
+    ],
+    description: "A final placeholder for a luxury villa project from your Facebook page. Replace the text and images to quickly integrate the real project into your pristine portfolio.",
+    highlights: [
+      "[Placeholder Highlight: Golf Course Facing]",
+      "[Placeholder Highlight: Italian Kitchen]"
+    ],
+    amenities: [
+      "[Placeholder Amenity: Private Pool]",
+      "[Placeholder Amenity: Servant Quarters]"
+    ],
+    specs: [
+      { label: "Land Area", value: "1 Kanal" }
+    ],
+    paymentPlan: {
+      downPayment: "100% Upfront",
+      installments: "N/A",
+      possession: "Immediate",
+      duration: "Ready"
+    }
+  }
 };
 
 export function ProjectDetailModal({
@@ -340,7 +451,7 @@ export function ProjectDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0 rounded-2xl md:rounded-3xl border-border/80 bg-card shadow-2xl">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0 rounded-[2rem] border-border/20 bg-card/85 backdrop-blur-3xl shadow-[0_40px_80px_rgb(0,0,0,0.4)]">
         <div className="relative">
           {/* Main Gallery Hero */}
           <div className="relative aspect-[16/9] md:aspect-[21/9] w-full overflow-hidden bg-black/90">
@@ -404,10 +515,10 @@ export function ProjectDetailModal({
                 <button
                   key={idx}
                   onClick={() => setActiveImageIdx(idx)}
-                  className={`relative w-20 h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all ${
+                  className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all duration-300 ${
                     activeImageIdx === idx
-                      ? "border-primary ring-2 ring-primary/20 scale-105"
-                      : "border-transparent opacity-70 hover:opacity-100"
+                      ? "border-primary ring-2 ring-primary/30 scale-105 shadow-lg"
+                      : "border-transparent opacity-60 hover:opacity-100 hover:scale-105"
                   }`}
                 >
                   <img src={img} alt="Thumbnail" className="w-full h-full object-cover" />
@@ -419,7 +530,7 @@ export function ProjectDetailModal({
           {/* Content Body */}
           <div className="p-6 md:p-8 space-y-6">
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-muted/40 border border-border/70 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-3xl bg-muted/30 border border-border/40 text-center shadow-inner">
               <div className="p-2">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
                   Investment Value
@@ -540,7 +651,7 @@ export function ProjectDetailModal({
                   </div>
                   <Button
                     asChild
-                    className="min-h-11 shrink-0 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-md gap-2"
+                    className="min-h-12 shrink-0 rounded-full bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-lg gap-2 transition-all hover:scale-105"
                   >
                     <a
                       href={project.videoUrl}
@@ -553,35 +664,50 @@ export function ProjectDetailModal({
                     </a>
                   </Button>
                 </div>
+                {/* Embed Facebook Reel if it's the Manal Heights Video */}
+                {project.id === "manal-heights" && (
+                  <div className="mt-6 flex justify-center w-full overflow-hidden rounded-xl bg-black">
+                    <iframe 
+                      src="https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fv%2F18hJQwxFdK%2F%3Fmibextid%3DwwXIfr&show_text=false&width=500" 
+                      width="500" 
+                      height="889" 
+                      style={{ border: "none", overflow: "hidden", maxWidth: "100%", maxHeight: "70vh" }} 
+                      scrolling="no" 
+                      frameBorder="0" 
+                      allowFullScreen={true} 
+                      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                    ></iframe>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Payment Schedule Card */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/5 via-card to-amber-500/5 border border-primary/20">
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-primary/10 via-card to-amber-500/10 border border-primary/20 shadow-lg">
               <h4 className="text-sm font-bold text-foreground flex items-center gap-2 mb-3">
                 <Calendar className="w-4 h-4 text-primary" />
                 Structured Investor Payment Plan
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-2.5 rounded-lg bg-card border border-border/60">
+                <div className="p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/40">
                   <div className="text-muted-foreground font-medium">Down Payment</div>
                   <div className="font-bold text-foreground mt-1">
                     {project.paymentPlan.downPayment}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-lg bg-card border border-border/60">
+                <div className="p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/40">
                   <div className="text-muted-foreground font-medium">Installments</div>
                   <div className="font-bold text-foreground mt-1">
                     {project.paymentPlan.installments}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-lg bg-card border border-border/60">
+                <div className="p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/40">
                   <div className="text-muted-foreground font-medium">On Possession</div>
                   <div className="font-bold text-foreground mt-1">
                     {project.paymentPlan.possession}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-lg bg-card border border-border/60">
+                <div className="p-3 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/40">
                   <div className="text-muted-foreground font-medium">Tenure</div>
                   <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                     {project.paymentPlan.duration}
@@ -599,7 +725,7 @@ export function ProjectDetailModal({
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <Button
                   asChild
-                  className="flex-1 sm:flex-none min-h-11 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md"
+                  className="flex-1 sm:flex-none min-h-12 rounded-full bg-primary text-primary-foreground font-semibold shadow-lg transition-all hover:scale-105"
                 >
                   <a
                     href={`https://wa.me/923445533767?text=Hello%20Precise%20Group,%20I%20am%20interested%20in%20booking%20or%20viewing%20${encodeURIComponent(
@@ -617,7 +743,7 @@ export function ProjectDetailModal({
                 <Button
                   asChild
                   variant="outline"
-                  className="flex-1 sm:flex-none min-h-11 rounded-xl font-medium"
+                  className="flex-1 sm:flex-none min-h-12 rounded-full font-medium transition-all hover:scale-105"
                 >
                   <a
                     href="tel:+923445533767"

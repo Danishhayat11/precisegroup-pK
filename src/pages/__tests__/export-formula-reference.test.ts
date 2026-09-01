@@ -13,9 +13,9 @@ const SRC = readFileSync(resolve(__dirname, "../Dashboard.tsx"), "utf8");
 const CSV_SECTION_HEADER = "FORMULA REFERENCE";
 // The source uses the JS escape `\u2212` (U+2212 MINUS SIGN) literally — match either form.
 const CSV_TOTAL_RECEIVED_FORMULA =
-  "Cash Recovered \\u2212 Adjustment Approved \\u2212 Commission Paid";
-const PDF_FOOTER_NOTE = "Total Received = Cash \\u2212 Adjustment Approved \\u2212 Commission Paid";
-const PDF_KEYWORD = "Total Received = Cash \\u2212 Adjustment Approved \\u2212 Commission Paid";
+  "Cash Recovered + Adjustment Realised \\u2212 Commission Paid";
+const PDF_FOOTER_NOTE = "Total Received = Cash + Adjustment Realised \\u2212 Commission Paid";
+const PDF_KEYWORD = "Total Received = Cash + Adjustment Realised \\u2212 Commission Paid";
 
 describe("Dashboard exports — Total Received formula reference", () => {
   it("CSV export emits a FORMULA REFERENCE section", () => {

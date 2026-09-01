@@ -16,7 +16,7 @@
  */
 import React from "react";
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -36,13 +36,14 @@ beforeAll(() => {
 // ---- Shared mock state -------------------------------------------------
 const toastSpy = vi.fn();
 
-// Booking that the form will "select" via `initial.booking_id`.
 const BOOKING = {
   booking_id: "BK-MA-00007",
   client_name: "Ali Raza",
   unit_id: "MA-U-014",
   project_code: "MA",
   project_name: "Manal Arcade",
+  remaining_balance: 5000000,
+  booking_date: "2020-01-01",
 };
 
 // Records what the supabase mock has been asked to do so tests can
@@ -184,8 +185,7 @@ beforeEach(() => {
 async function typeAmount(user: ReturnType<typeof userEvent.setup>, value: string) {
   // Amount input has inputMode="numeric" and comma-formats on blur.
   const amt = screen.getByLabelText(/Amount/i) as HTMLInputElement;
-  await user.clear(amt);
-  await user.type(amt, value);
+  fireEvent.change(amt, { target: { value } });
 }
 
 async function pickMode(user: ReturnType<typeof userEvent.setup>, label: RegExp) {
@@ -248,7 +248,7 @@ describe("PaymentForm — edge cases", () => {
     await user.click(screen.getByLabelText(/Split this payment across multiple heads/i));
     await user.click(await screen.findByTestId("seed-alloc"));
 
-    await user.click(screen.getByRole("button", { name: /Record payment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Record payment/i }));
 
     // RPC was invoked, but no payments/allocations insert followed.
     await waitFor(() => {
@@ -279,7 +279,7 @@ describe("PaymentForm — edge cases", () => {
 
     await typeAmount(user, "25000");
     await pickMode(user, /^Cash$/i);
-    await user.click(screen.getByRole("button", { name: /Record payment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Record payment/i }));
 
     // Exactly one payments insert, stamped with the BOOKING's project —
     // never the top bar's active MH project.

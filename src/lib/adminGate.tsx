@@ -16,7 +16,7 @@ export function useAdminContacts() {
   return useQuery({
     queryKey: ["admin-contacts"],
     queryFn: async () => {
-      const { data, error } = await callRpc("list_admin_contacts" as any, {} as any);
+      const { data, error } = await callRpc("list_admin_contacts");
       if (error) return [] as { email: string; full_name: string | null }[];
       return (data ?? []) as { email: string; full_name: string | null }[];
     },

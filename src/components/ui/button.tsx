@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils";
 const buttonVariants = cva(
   [
     // Layout + typography
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium cursor-pointer select-none",
-    // Motion tokens — high-precision spring timing
-    "transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]",
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-[13.5px] font-semibold tracking-[-0.01em] cursor-pointer select-none",
+    // Motion tokens — high-precision spring timing (Apple style)
+    "transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
     // Focus ring — Mac-style soft halo
     "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20",
     // Active/pressed — Apple tactile press
-    "active:scale-[0.96]",
+    "active:scale-[0.97]",
     // Disabled — no shadow, no motion, no filter, cursor blocked
     "disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:scale-100 disabled:bg-muted disabled:text-muted-foreground disabled:border-none",
     // Error state via aria-invalid
@@ -25,22 +25,22 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-gradient-to-b from-primary/90 to-primary text-primary-foreground font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.15)] hover:shadow-[0_8px_20px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.2)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.05)] border border-primary/50 relative overflow-hidden after:absolute after:inset-0 after:bg-gradient-to-b after:from-white/10 after:to-transparent after:opacity-0 hover:after:opacity-100 after:transition-opacity",
+          "bg-gradient-to-b from-primary/80 via-primary to-primary/95 text-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-[0_2px_6px_rgba(0,0,0,0.1),0_8px_24px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.3)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.1)] border border-primary/30 relative overflow-hidden after:absolute after:inset-0 after:bg-gradient-to-b after:from-white/10 after:to-transparent after:opacity-0 hover:after:opacity-100 after:transition-opacity after:duration-400 dark:shadow-[0_1px_3px_rgba(0,0,0,0.5),0_4px_12px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.1)]",
         destructive:
-          "bg-gradient-to-b from-destructive/90 to-destructive text-white font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.15)] hover:shadow-[0_8px_20px_rgba(255,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.2)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm border border-destructive/50",
+          "bg-gradient-to-b from-destructive/90 to-destructive text-white shadow-[0_1px_3px_rgba(0,0,0,0.1),0_4px_12px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.15)] hover:shadow-[0_2px_6px_rgba(255,0,0,0.15),0_8px_24px_rgba(255,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.25)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm border border-destructive/40",
         outline:
-          "border border-border/40 bg-white/5 dark:bg-black/10 backdrop-blur-md text-foreground font-medium shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:bg-white/40 dark:hover:bg-white/10 hover:border-foreground/20 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:-translate-y-0.5 active:translate-y-0",
+          "border border-border/60 bg-white/5 dark:bg-black/20 backdrop-blur-xl text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:bg-white/40 dark:hover:bg-white/10 hover:border-foreground/30 hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 active:translate-y-0",
         secondary:
-          "bg-secondary/70 backdrop-blur-lg text-secondary-foreground font-medium shadow-[0_1px_2px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.4)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] border border-white/20 dark:border-white/5 hover:bg-secondary/90 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 active:translate-y-0",
-        ghost: "text-foreground font-medium hover:bg-foreground/5 hover:text-foreground",
-        link: "text-primary font-medium underline-offset-4 hover:underline active:opacity-70",
+          "bg-secondary/70 backdrop-blur-xl text-secondary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] border border-white/30 dark:border-white/10 hover:bg-secondary/90 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 active:translate-y-0",
+        ghost: "text-foreground hover:bg-foreground/5 hover:text-foreground active:scale-[0.97] active:bg-foreground/10",
+        link: "text-primary underline-offset-4 hover:underline active:opacity-60",
       },
       size: {
         // Mobile/tablet meet WCAG 2.5.5 (≥44×44); lg: restores compact desktop sizing.
-        default: "h-11 px-5 py-2 lg:h-9 rounded-full",
-        sm: "h-11 rounded-full px-4 text-xs lg:h-8",
-        lg: "h-12 rounded-full px-8 lg:h-10 text-base",
-        icon: "h-11 w-11 lg:h-9 lg:w-9 rounded-full",
+        default: "h-11 px-6 py-2 lg:h-10 lg:px-5",
+        sm: "h-10 rounded-full px-4 text-xs lg:h-8",
+        lg: "h-12 rounded-full px-8 lg:h-11 text-[14.5px]",
+        icon: "h-11 w-11 lg:h-10 lg:w-10 rounded-full",
       },
     },
     defaultVariants: {
@@ -95,7 +95,15 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+        onClick={(e: any) => {
+          console.log("BUTTON CLICKED:", props.children);
+          if (props.onClick) props.onClick(e);
+        }}
+      />
     );
   },
 );

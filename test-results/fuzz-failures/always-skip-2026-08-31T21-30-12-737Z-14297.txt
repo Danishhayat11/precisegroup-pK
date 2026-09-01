@@ -1,0 +1,8 @@
+Property "always-skip" failed (mode: tooManySkips).
+  runs=0  shrinks=0  skips=501  seed=3  path=""
+No counterexample: fast-check gave up after 501 skipped samples
+(fc.pre / fc.assume rejected too much of the arbitrary's output).
+  (no per-sample data — rerun with { verbose: fc.VerbosityLevel.Verbose } to capture last inputs)
+Reproduce locally:
+  node scripts/ci/fuzz-replay.mjs --seed 3 --path "" --file /Users/danishhayat/Desktop/precisegroup-pk-main/src/lib/__tests__/support/__tests__/fuzzReporter.test.ts --name always-skip
+  fc.assert(<property>, { seed: 3, path: "", endOnFailure: true })

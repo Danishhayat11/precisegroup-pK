@@ -20,7 +20,7 @@ describe("Documents.tsx — Manal Heights branding regression", () => {
   // Manal Heights value in the same ternary).
   const ALLOWED = [
     'isHeights ? "MANAL HEIGHTS" : "MANAL ARCADE"',
-    'isHeights ? "MANAL HEIGHTS, B-17, ISLAMABAD" : "MANAL ARCADE, B-17, ISLAMABAD"',
+    '? "MANAL HEIGHTS, B-17, ISLAMABAD"\n      : "MANAL ARCADE, B-17, ISLAMABAD"',
   ] as const;
 
   it("has no unexpected 'Manal Arcade' strings", () => {

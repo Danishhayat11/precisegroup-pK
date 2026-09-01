@@ -25,5 +25,6 @@ describe("reports routes — import-all smoke", () => {
       const mod = (await routeModules[path]()) as Record<string, unknown>;
       expect(mod.Route, `${path} must export \`Route\``).toBeDefined();
     },
+    15000,
   );
 });

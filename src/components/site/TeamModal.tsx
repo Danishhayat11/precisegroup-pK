@@ -248,7 +248,7 @@ export function TeamModal({
 
             {/* Quick Action Bar */}
             <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-muted/50 border border-border/60 mb-6">
-              <Button asChild size="sm" className="min-h-10 rounded-lg font-medium shadow-sm">
+              <Button asChild size="sm" className="min-h-10 font-medium shadow-sm">
                 <a
                   href={`https://wa.me/${whatsappClean}?text=Hello%20${encodeURIComponent(member.name)},%20I%20would%20like%20to%20inquire%20about%20Precise%20Group%20real%20estate%20projects.`}
                   target="_blank"
@@ -264,7 +264,7 @@ export function TeamModal({
                 asChild
                 variant="outline"
                 size="sm"
-                className="min-h-10 rounded-lg font-medium"
+                className="min-h-10 font-medium"
               >
                 <a href={`tel:${member.phone}`} className="inline-flex items-center gap-2">
                   <Phone className="w-4 h-4 text-primary" />
@@ -276,7 +276,7 @@ export function TeamModal({
                 asChild
                 variant="outline"
                 size="sm"
-                className="min-h-10 rounded-lg font-medium"
+                className="min-h-10 font-medium"
               >
                 <a href={`mailto:${member.email}`} className="inline-flex items-center gap-2">
                   <Mail className="w-4 h-4 text-primary" />

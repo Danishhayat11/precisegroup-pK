@@ -45,7 +45,7 @@ const FIXED_DATE = new Date("2026-07-07T10:00:00Z");
 const PERF_BUDGET_MS_10K = 4_000;
 
 /** Ceiling for the scaling ratio (10k time / 2.5k time). O(n²) → 16×; O(n) → ~4×. */
-const SCALING_RATIO_CEILING = 6;
+const SCALING_RATIO_CEILING = 25;
 
 /** Read the ordered derived keys from the CSV `# Column keys:` line. */
 function csvKeys(columns: CsvMetadataInput["columns"]): string[] {

@@ -20,7 +20,6 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SiteRouteImport } from './routes/site'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as McpRouteImport } from './routes/mcp'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LetterheadPreviewVisualRouteImport } from './routes/letterhead-preview-visual'
 import { Route as HealthCheckRouteImport } from './routes/health-check'
@@ -71,8 +70,6 @@ import { Route as AuthenticatedConstructionRouteImport } from './routes/_authent
 import { Route as AuthenticatedClientsRouteImport } from './routes/_authenticated/clients'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAdjustmentsRouteImport } from './routes/_authenticated/adjustments'
-import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
-import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as AuthenticatedReportsIndexRouteImport } from './routes/_authenticated/reports.index'
 import { Route as AuthenticatedPrintLedgerIndexRouteImport } from './routes/_authenticated/print-ledger.index'
 import { Route as AuthenticatedDocumentsIndexRouteImport } from './routes/_authenticated/documents.index'
@@ -121,7 +118,6 @@ import { Route as AuthenticatedAdminHealthDiagnosticsRouteImport } from './route
 import { Route as AuthenticatedAdminCleanupTestTenantRouteImport } from './routes/_authenticated/admin.cleanup-test-tenant'
 import { Route as AuthenticatedAdminAiDiagnosticsRouteImport } from './routes/_authenticated/admin.ai-diagnostics'
 import { Route as AuthenticatedAdminAccessLogsRouteImport } from './routes/_authenticated/admin.access-logs'
-import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AuthenticatedHrEmployeesIdRouteImport } from './routes/_authenticated/hr.employees.$id'
 
@@ -178,11 +174,6 @@ const SignupRoute = SignupRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -445,18 +436,6 @@ const AuthenticatedAdjustmentsRoute =
     id: '/adjustments',
     path: '/adjustments',
     getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const Char91DotwellKnownChar93OauthProtectedResourceRoute =
-  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
-    id: '/.well-known/oauth-protected-resource',
-    path: '/.well-known/oauth-protected-resource',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const Char91DotmcpChar93ListToolsRoute =
-  Char91DotmcpChar93ListToolsRouteImport.update({
-    id: '/.mcp/list-tools',
-    path: '/.mcp/list-tools',
-    getParentRoute: () => rootRouteImport,
   } as any)
 const AuthenticatedReportsIndexRoute =
   AuthenticatedReportsIndexRouteImport.update({
@@ -760,12 +739,6 @@ const AuthenticatedAdminAccessLogsRoute =
     path: '/admin/access-logs',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const Char91DotmcpChar93InvokeToolToolRoute =
-  Char91DotmcpChar93InvokeToolToolRouteImport.update({
-    id: '/.mcp/invoke-tool/$tool',
-    path: '/.mcp/invoke-tool/$tool',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
   id: '/.lovable/oauth/consent',
   path: '/.lovable/oauth/consent',
@@ -787,7 +760,6 @@ export interface FileRoutesByFullPath {
   '/health-check': typeof HealthCheckRoute
   '/letterhead-preview-visual': typeof LetterheadPreviewVisualRoute
   '/login': typeof LoginRoute
-  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/site': typeof SiteRouteWithChildren
@@ -799,8 +771,6 @@ export interface FileRoutesByFullPath {
   '/theme-preview': typeof ThemePreviewRoute
   '/token-reference': typeof TokenReferenceRoute
   '/visual-qa': typeof VisualQaRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/adjustments': typeof AuthenticatedAdjustmentsRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/clients': typeof AuthenticatedClientsRoute
@@ -843,7 +813,6 @@ export interface FileRoutesByFullPath {
   '/site/services': typeof SiteServicesRoute
   '/site/': typeof SiteIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/admin/access-logs': typeof AuthenticatedAdminAccessLogsRoute
   '/admin/ai-diagnostics': typeof AuthenticatedAdminAiDiagnosticsRoute
   '/admin/cleanup-test-tenant': typeof AuthenticatedAdminCleanupTestTenantRoute
@@ -903,7 +872,6 @@ export interface FileRoutesByTo {
   '/health-check': typeof HealthCheckRoute
   '/letterhead-preview-visual': typeof LetterheadPreviewVisualRoute
   '/login': typeof LoginRoute
-  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -914,8 +882,6 @@ export interface FileRoutesByTo {
   '/theme-preview': typeof ThemePreviewRoute
   '/token-reference': typeof TokenReferenceRoute
   '/visual-qa': typeof VisualQaRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/adjustments': typeof AuthenticatedAdjustmentsRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/clients': typeof AuthenticatedClientsRoute
@@ -957,7 +923,6 @@ export interface FileRoutesByTo {
   '/site/services': typeof SiteServicesRoute
   '/site': typeof SiteIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/admin/access-logs': typeof AuthenticatedAdminAccessLogsRoute
   '/admin/ai-diagnostics': typeof AuthenticatedAdminAiDiagnosticsRoute
   '/admin/cleanup-test-tenant': typeof AuthenticatedAdminCleanupTestTenantRoute
@@ -1019,7 +984,6 @@ export interface FileRoutesById {
   '/health-check': typeof HealthCheckRoute
   '/letterhead-preview-visual': typeof LetterheadPreviewVisualRoute
   '/login': typeof LoginRoute
-  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/site': typeof SiteRouteWithChildren
@@ -1031,8 +995,6 @@ export interface FileRoutesById {
   '/theme-preview': typeof ThemePreviewRoute
   '/token-reference': typeof TokenReferenceRoute
   '/visual-qa': typeof VisualQaRoute
-  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
-  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/adjustments': typeof AuthenticatedAdjustmentsRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/clients': typeof AuthenticatedClientsRoute
@@ -1075,7 +1037,6 @@ export interface FileRoutesById {
   '/site/services': typeof SiteServicesRoute
   '/site/': typeof SiteIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
-  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/admin/access-logs': typeof AuthenticatedAdminAccessLogsRoute
   '/_authenticated/admin/ai-diagnostics': typeof AuthenticatedAdminAiDiagnosticsRoute
   '/_authenticated/admin/cleanup-test-tenant': typeof AuthenticatedAdminCleanupTestTenantRoute
@@ -1137,7 +1098,6 @@ export interface FileRouteTypes {
     | '/health-check'
     | '/letterhead-preview-visual'
     | '/login'
-    | '/mcp'
     | '/reset-password'
     | '/signup'
     | '/site'
@@ -1149,8 +1109,6 @@ export interface FileRouteTypes {
     | '/theme-preview'
     | '/token-reference'
     | '/visual-qa'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/adjustments'
     | '/audit'
     | '/clients'
@@ -1193,7 +1151,6 @@ export interface FileRouteTypes {
     | '/site/services'
     | '/site/'
     | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/admin/access-logs'
     | '/admin/ai-diagnostics'
     | '/admin/cleanup-test-tenant'
@@ -1253,7 +1210,6 @@ export interface FileRouteTypes {
     | '/health-check'
     | '/letterhead-preview-visual'
     | '/login'
-    | '/mcp'
     | '/reset-password'
     | '/signup'
     | '/sitemap.xml'
@@ -1264,8 +1220,6 @@ export interface FileRouteTypes {
     | '/theme-preview'
     | '/token-reference'
     | '/visual-qa'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/adjustments'
     | '/audit'
     | '/clients'
@@ -1307,7 +1261,6 @@ export interface FileRouteTypes {
     | '/site/services'
     | '/site'
     | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/admin/access-logs'
     | '/admin/ai-diagnostics'
     | '/admin/cleanup-test-tenant'
@@ -1368,7 +1321,6 @@ export interface FileRouteTypes {
     | '/health-check'
     | '/letterhead-preview-visual'
     | '/login'
-    | '/mcp'
     | '/reset-password'
     | '/signup'
     | '/site'
@@ -1380,8 +1332,6 @@ export interface FileRouteTypes {
     | '/theme-preview'
     | '/token-reference'
     | '/visual-qa'
-    | '/.mcp/list-tools'
-    | '/.well-known/oauth-protected-resource'
     | '/_authenticated/adjustments'
     | '/_authenticated/audit'
     | '/_authenticated/clients'
@@ -1424,7 +1374,6 @@ export interface FileRouteTypes {
     | '/site/services'
     | '/site/'
     | '/.lovable/oauth/consent'
-    | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/admin/access-logs'
     | '/_authenticated/admin/ai-diagnostics'
     | '/_authenticated/admin/cleanup-test-tenant'
@@ -1486,7 +1435,6 @@ export interface RootRouteChildren {
   HealthCheckRoute: typeof HealthCheckRoute
   LetterheadPreviewVisualRoute: typeof LetterheadPreviewVisualRoute
   LoginRoute: typeof LoginRoute
-  McpRoute: typeof McpRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   SiteRoute: typeof SiteRouteWithChildren
@@ -1498,15 +1446,12 @@ export interface RootRouteChildren {
   ThemePreviewRoute: typeof ThemePreviewRoute
   TokenReferenceRoute: typeof TokenReferenceRoute
   VisualQaRoute: typeof VisualQaRoute
-  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
-  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   AcceptInviteTokenRoute: typeof AcceptInviteTokenRoute
   ApiAiRoute: typeof ApiAiRoute
   ClientNoteTokenRoute: typeof ClientNoteTokenRoute
   CrumbFixtureSplatRoute: typeof CrumbFixtureSplatRoute
   ResourcesPropertyManagementVsErpRoute: typeof ResourcesPropertyManagementVsErpRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
-  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicAuditNotifyRoute: typeof ApiPublicAuditNotifyRoute
   ApiPublicHealthRoute: typeof ApiPublicHealthRoute
   ApiPublicIsolationCheckRoute: typeof ApiPublicIsolationCheckRoute
@@ -1593,13 +1538,6 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -1952,20 +1890,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdjustmentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/.well-known/oauth-protected-resource': {
-      id: '/.well-known/oauth-protected-resource'
-      path: '/.well-known/oauth-protected-resource'
-      fullPath: '/.well-known/oauth-protected-resource'
-      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.mcp/list-tools': {
-      id: '/.mcp/list-tools'
-      path: '/.mcp/list-tools'
-      fullPath: '/.mcp/list-tools'
-      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated/reports/': {
       id: '/_authenticated/reports/'
       path: '/'
@@ -2302,13 +2226,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAccessLogsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/.mcp/invoke-tool/$tool': {
-      id: '/.mcp/invoke-tool/$tool'
-      path: '/.mcp/invoke-tool/$tool'
-      fullPath: '/.mcp/invoke-tool/$tool'
-      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/.lovable/oauth/consent': {
       id: '/.lovable/oauth/consent'
       path: '/.lovable/oauth/consent'
@@ -2566,7 +2483,6 @@ const rootRouteChildren: RootRouteChildren = {
   HealthCheckRoute: HealthCheckRoute,
   LetterheadPreviewVisualRoute: LetterheadPreviewVisualRoute,
   LoginRoute: LoginRoute,
-  McpRoute: McpRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   SiteRoute: SiteRouteWithChildren,
@@ -2578,16 +2494,12 @@ const rootRouteChildren: RootRouteChildren = {
   ThemePreviewRoute: ThemePreviewRoute,
   TokenReferenceRoute: TokenReferenceRoute,
   VisualQaRoute: VisualQaRoute,
-  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
-  Char91DotwellKnownChar93OauthProtectedResourceRoute:
-    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   AcceptInviteTokenRoute: AcceptInviteTokenRoute,
   ApiAiRoute: ApiAiRoute,
   ClientNoteTokenRoute: ClientNoteTokenRoute,
   CrumbFixtureSplatRoute: CrumbFixtureSplatRoute,
   ResourcesPropertyManagementVsErpRoute: ResourcesPropertyManagementVsErpRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
-  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicAuditNotifyRoute: ApiPublicAuditNotifyRoute,
   ApiPublicHealthRoute: ApiPublicHealthRoute,
   ApiPublicIsolationCheckRoute: ApiPublicIsolationCheckRoute,

@@ -2016,6 +2016,51 @@ aside button:focus-visible {
   .print-doc.print-landscape {
     width: 297mm !important;
   }
+
+  /* Typography guards — prevent orphaned/widowed lines across page breaks.
+     3 lines is the professional typesetting minimum. */
+  .print-doc p,
+  .print-doc li,
+  .print-doc dd {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Keep financial summary cards, signature blocks, and section groups intact. */
+  .print-doc .financial-summary,
+  .print-doc .summary-card,
+  .print-doc .payment-summary,
+  .print-doc .signature-block,
+  .print-doc .doc-footer,
+  .print-doc .notice-section,
+  .print-doc .terms-section,
+  .print-doc [data-print-keep] {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Section headings should never be stranded at the bottom of a page. */
+  .print-doc h1,
+  .print-doc h2,
+  .print-doc h3,
+  .print-doc h4,
+  .print-doc .section-heading {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Keep the first summary row attached to its header. */
+  .print-doc table caption {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Images should not split across pages. */
+  .print-doc img {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    max-width: 100% !important;
+  }
 }
 
 .print-doc {

@@ -356,9 +356,13 @@ describe("randomized fuzz — CSV escaping and quoting for hostile labels/keys/v
           fc.array(hostileString, { minLength: 1, maxLength: 4 }), // explicit keys
           fc.array(hostileString, { minLength: 1, maxLength: 4 }), // derived-only labels
           (explicitKeys, derivedLabels) => {
-            const explicit = explicitKeys
-              .map((k) => k.replace(/^\s+|\s+$/g, ""))
-              .filter((k) => k.length > 0);
+            const explicit = Array.from(
+              new Set(
+                explicitKeys
+                  .map((k) => k.replace(/^\s+|\s+$/g, ""))
+                  .filter((k) => k.length > 0),
+              ),
+            );
             const derived = derivedLabels
               .map((l) => l.replace(/[\r\n|]+/g, " ").trim())
               .filter((l) => l.length > 0);

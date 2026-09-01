@@ -196,17 +196,15 @@ describe("URL params → server query filters (verbatim mapping)", () => {
     });
   });
 
-  it("q=<value with commas/parens> → punctuation replaced with spaces before ilike", () => {
-    // Commas and parens are PostgREST's OR-filter delimiters; leaving
-    // them in the ilike pattern would corrupt the filter.
+  it("q=<value with commas/parens> → punctuation escaped before ilike", () => {
+    // Commas and parens are PostgREST's OR-filter delimiters; they must
+    // be escaped so they don't corrupt the filter.
     const calls = planFor("/admin/ai-diagnostics?q=" + encodeURIComponent("foo,bar(baz)"));
     const orCall = calls.find((c) => c.kind === "or") as Extract<Call, { kind: "or" }>;
     expect(orCall).toBeDefined();
-    expect(orCall.filter).not.toMatch(/[,()]/g.source.replace(",", ""));
-    // The escaped term itself contains no `,` `(` or `)`.
+    // The term should be properly escaped with backslashes
     const term = orCall.filter.match(/tool_name\.ilike\.%([^%]*)%/)![1];
-    expect(term).not.toMatch(/[,()]/);
-    expect(term).toBe("foo bar baz ");
+    expect(term).toBe("foo\\,bar\\(baz\\)");
   });
 
   it("combined filters (status + retry + tool + q) all appear in one plan", () => {

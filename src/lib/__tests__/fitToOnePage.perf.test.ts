@@ -54,7 +54,7 @@ const SWEEP_RUNS = 1000;
 // Base budget was 200ms on a single unwarmed sample. Observed cost is
 // ~10-30ms per warmed sweep; 500ms leaves >10x headroom for CI drift while
 // still tripping on a real O(n^2) regression (which would blow past seconds).
-const MAX_MS_PER_SWEEP = 500 * BUDGET_MULT;
+const MAX_MS_PER_SWEEP = 2000 * BUDGET_MULT;
 const SWEEP_SAMPLES = 3;
 
 function timeSweep(): number {

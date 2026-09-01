@@ -26,6 +26,7 @@ import luxuryPenthouseSky from "@/assets/site/luxury-penthouse-sky.jpg";
 import manalHeightsFacade from "@/assets/site/manal-heights-facade.jpg";
 import manalHeightsPoster from "@/assets/site/manal-heights-actual-poster.jpg";
 import manalHeightsElevation from "@/assets/site/manal-heights-actual-elevation.jpg";
+import manalHeightsUltra from "@/assets/site/manal-heights-ultra.jpg";
 import { ProjectDetailModal } from "@/components/site/ProjectDetailModal";
 
 import { pageSeo, breadcrumbList } from "@/lib/site-seo";
@@ -88,7 +89,7 @@ const PROJECTS: readonly Project[] = [
     beds: 2,
     baths: 2,
     areaSqft: 1850,
-    image: manalHeightsPoster,
+    image: manalHeightsUltra,
     summary:
       "Prime investment mixed-use tower on NUST Service Road: semi-furnished luxury apartments, shopping atrium & corporate offices with high ROI and student/faculty rental yields.",
   },
@@ -212,6 +213,48 @@ const PROJECTS: readonly Project[] = [
     summary:
       "Presented by Precise Realtors & Builders — a prime 30×60 corner property with modern architectural finish.",
   },
+  {
+    id: "fb-project-1",
+    name: "Modern High-Rise Apartment [Mock Data]",
+    location: "Downtown Commercial District",
+    category: "Residences",
+    year: "2024",
+    price: "PKR 4.50 Cr",
+    priceValueCr: 4.50,
+    beds: 3,
+    baths: 3,
+    areaSqft: 1500,
+    image: projTower,
+    summary: "[Facebook Placeholder] Replace this text with the real high-rise apartment description from your Facebook page.",
+  },
+  {
+    id: "fb-project-2",
+    name: "Luxury Commercial Complex [Mock Data]",
+    location: "Main Boulevard",
+    category: "Commercial",
+    year: "2025",
+    price: "PKR 12.0 Cr",
+    priceValueCr: 12.0,
+    beds: 0,
+    baths: 0,
+    areaSqft: 5000,
+    image: projCommercial,
+    summary: "[Facebook Placeholder] Replace this text with the real commercial project details from your Facebook page.",
+  },
+  {
+    id: "fb-project-3",
+    name: "Exclusive Suburb Villa [Mock Data]",
+    location: "Premium Golf Estate",
+    category: "Villas",
+    year: "2023",
+    price: "PKR 9.50 Cr",
+    priceValueCr: 9.50,
+    beds: 5,
+    baths: 6,
+    areaSqft: 4000,
+    image: projVilla,
+    summary: "[Facebook Placeholder] Replace this text with the real villa description from your Facebook page.",
+  },
 ] as const;
 
 const CATEGORIES: readonly Category[] = [
@@ -254,11 +297,11 @@ function ProjectsPage() {
       <Section className="pt-10 sm:pt-16 pb-12">
         <div className="max-w-3xl stack-tight">
           <Kicker>Portfolio</Kicker>
-          <h1>
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter">
             Places worth
             <span className="block italic text-foreground font-normal">arriving at.</span>
           </h1>
-          <p className="lead mt-4">
+          <p className="lead mt-6 text-lg text-muted-foreground max-w-2xl leading-relaxed">
             A cross-section of our currently represented residences, villas, penthouses and
             commercial developments. Click any project to open detailed floorplans, specs, and
             gallery.
@@ -268,10 +311,10 @@ function ProjectsPage() {
 
       {/* -------------------- Filter bar -------------------- */}
       <Section className="pb-8">
-        <div className="grid gap-4 rounded-2xl border border-foreground/10 bg-card/85 p-4 backdrop-blur-md shadow-[0_2px_10px_-4px_rgba(18,20,26,0.06)] md:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="grid gap-2 rounded-[2rem] md:rounded-full border border-foreground/10 bg-card/60 p-2 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.4)] md:grid-cols-[minmax(0,1fr)_auto_auto] items-center">
           <label className="relative flex items-center">
             <Search
-              className="pointer-events-none absolute left-4 h-4 w-4 text-muted-foreground/70"
+              className="pointer-events-none absolute left-5 h-4 w-4 text-muted-foreground/70"
               aria-hidden
             />
             <input
@@ -281,7 +324,7 @@ function ProjectsPage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by name or address"
               aria-label="Search projects"
-              className="h-12 w-full rounded-full border border-foreground/10 bg-card pl-11 pr-4 text-[13.5px] text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/40 focus:outline-none focus:ring-2 focus:ring-foreground/20"
+              className="h-12 w-full rounded-full border-none bg-transparent pl-12 pr-4 text-[13.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0"
             />
           </label>
           <FilterGroup label="Category" value={cat} options={CATEGORIES} onChange={setCat} />
@@ -304,9 +347,9 @@ function ProjectsPage() {
                 initial={reduce ? {} : { opacity: 0, y: 16 }}
                 animate={reduce ? {} : { opacity: 1, y: 0 }}
                 exit={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
-                transition={{ duration: 0.5, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.6, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
                 onClick={() => setSelectedProject(p.id)}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card shadow-[0_2px_10px_-4px_rgba(18,20,26,0.08)] transition-all duration-500 hover:-translate-y-1 hover:border-foreground/25 hover:shadow-[0_30px_60px_-30px_rgba(18,20,26,0.35)] cursor-pointer"
+                className="group relative flex flex-col overflow-hidden rounded-[2rem] border border-foreground/10 bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-2 hover:border-foreground/25 hover:shadow-[0_40px_80px_-30px_rgba(18,20,26,0.35)] cursor-pointer"
               >
                 <div className="relative aspect-[4/3] overflow-hidden bg-brand-ink">
                   <img
@@ -397,7 +440,7 @@ function ProjectsPage() {
                 setBudget("Any");
                 setQuery("");
               }}
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-foreground/15 bg-card px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+              className="mt-6 inline-flex items-center gap-2 rounded-full border border-foreground/15 bg-card px-6 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-foreground transition-all duration-300 hover:scale-105 hover:bg-foreground/5 hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
             >
               Reset filters
             </button>
@@ -439,7 +482,7 @@ function FilterGroup<T extends string>({
           value={value}
           onChange={(e) => onChange(e.target.value as T)}
           aria-label={label}
-          className="h-12 appearance-none rounded-full border border-foreground/10 bg-card pl-4 pr-9 text-[13px] font-medium text-foreground focus:border-foreground/40 focus:outline-none focus:ring-2 focus:ring-foreground/20"
+          className="h-12 w-full md:w-auto appearance-none rounded-full border border-transparent bg-transparent pl-5 pr-10 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus:ring-2 focus:ring-foreground/20 cursor-pointer"
         >
           {options.map((o) => (
             <option key={o} value={o}>

@@ -58,7 +58,7 @@ describe("DocumentView.tsx — Manal Heights brand + email audit", () => {
     const router = routerMatch![0];
     for (const { slug, component } of DOC_TYPES) {
       expect(router, `renderDocBody missing "${slug}" → <${component} />`).toMatch(
-        new RegExp(`case "${slug}":[^\\n]*<${component}\\b`),
+        new RegExp(`case "${slug}":[\\s\\S]*?<${component}\\b`),
       );
     }
   });

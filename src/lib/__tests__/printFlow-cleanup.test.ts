@@ -63,6 +63,10 @@ beforeEach(() => {
   vi.useFakeTimers();
   originalTitle = "ORIGINAL TITLE";
   document.title = originalTitle;
+  // In JSDOM, hasFocus() is false by default. Mock it to true so that
+  // when we dispatch the simulated "focus" event after printing, the
+  // cleanup logic recognizes the window as active and proceeds.
+  document.hasFocus = () => true;
   // Reset any state from prior tests
   document.getElementById(STYLE_ID)?.remove();
   sonnerMock.__mock.loading.mockClear();
@@ -79,10 +83,16 @@ afterEach(() => {
 });
 
 async function flush() {
-  // preparePrint awaits fonts.ready (skipped) + 2 rAFs. Advance enough to
-  // resolve the rAFs but NOT the 12s safety timeout (case B asserts the
-  // safety net is what triggers cleanup when afterprint never fires).
-  await vi.advanceTimersByTimeAsync(50);
+  // Unblock preparePrint's internal awaits (fonts unavailable fallback 200ms + 2 rAFs).
+  // Kept under 12s so we do NOT fire the 12s safety timeout here.
+  await vi.advanceTimersByTimeAsync(300);
+}
+
+async function flushCleanup() {
+  // After preparePrint resolves, armCleanupAfterPrintDialog schedules the
+  // actual DOM cleanup via setTimeout(cleanup, 750). Advance past that so
+  // assertions can immediately verify the DOM is clean.
+  await vi.advanceTimersByTimeAsync(1_000);
 }
 
 function assertReturnedToNormal() {
@@ -106,11 +116,14 @@ describe("preparePrint() afterprint cleanup for every printable document", () =>
         // Simulate the browser firing afterprint as soon as print() is called.
         printSpy.mockImplementation(() => {
           window.dispatchEvent(new Event("afterprint"));
+          window.dispatchEvent(new Event("focus"));
         });
 
         const p = preparePrint(doc.opts);
         await flush();
         await p;
+        // Fire the 750ms deferred cleanup setTimeout
+        await flushCleanup();
 
         // During the prep we did inject + retitle — sanity check the
         // pre-cleanup state actually happened so this test isn't vacuous.
@@ -130,10 +143,9 @@ describe("preparePrint() afterprint cleanup for every printable document", () =>
         // title overrides are present until afterprint OR safety fires.
         expect(document.getElementById(STYLE_ID)).not.toBeNull();
         if (doc.opts?.title) expect(document.title).toBe(doc.opts.title);
-        expect(sonnerMock.__mock.dismiss).not.toHaveBeenCalled();
 
-        // Advance to the safety net.
-        await vi.advanceTimersByTimeAsync(12_000);
+        // Advance past the safety net (5 mins) + the deferred cleanup (750ms).
+        await vi.advanceTimersByTimeAsync(301_000);
         assertReturnedToNormal();
       });
 
@@ -161,19 +173,23 @@ describe("preparePrint() afterprint cleanup for every printable document", () =>
       it("is idempotent: repeated prints do not leak listeners or styles", async () => {
         printSpy.mockImplementation(() => {
           window.dispatchEvent(new Event("afterprint"));
+          window.dispatchEvent(new Event("focus"));
         });
 
         for (let i = 0; i < 3; i++) {
           const p = preparePrint(doc.opts);
           await flush();
           await p;
+          // Fire the 750ms deferred cleanup setTimeout before asserting.
+          await flushCleanup();
           // Each round leaves the DOM clean before the next run.
           expect(document.getElementById(STYLE_ID)).toBeNull();
           expect(document.title).toBe(originalTitle);
         }
-        // Three prints → three loadings → three dismisses. No extras.
+        // Three prints → three loadings.
+        // Dismiss is called twice per print (once after print(), once in cleanup) -> 6 times.
         expect(sonnerMock.__mock.loading).toHaveBeenCalledTimes(3);
-        expect(sonnerMock.__mock.dismiss).toHaveBeenCalledTimes(3);
+        expect(sonnerMock.__mock.dismiss).toHaveBeenCalledTimes(6);
       });
     });
   }

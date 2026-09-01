@@ -56,11 +56,9 @@ export function computeTotalReceived(input: {
   const adjApproved = sumAdjApproved(input.adjustments);
   const commissionPaid = sumCommissionPaid(input.bookings);
 
-  // Business Rule: Total Received = Cash − Adjustment Approved − Commission Paid.
-  // Adjustments are write-offs against the client's balance — the full approved
-  // value is deducted. adjRealised is tracked separately for reporting only.
+  // Business Rule: Total Received = Cash + Adjustment Realised − Commission Paid.
   // We use strict 2-decimal rounding to prevent floating-point drift.
-  const val = cashRecovered - adjApproved - commissionPaid;
+  const val = cashRecovered + adjRealised - commissionPaid;
   const totalReceived = Math.round((val + Number.EPSILON) * 100) / 100;
 
   return {

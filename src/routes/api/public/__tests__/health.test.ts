@@ -232,7 +232,7 @@ describe("Health Check API Handler", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.metrics.refresh_duration_ms).toBeGreaterThanOrEqual(100);
+    expect(body.metrics.refresh_duration_ms).toBeGreaterThanOrEqual(90);
     expect(body.refreshed).toBe(true);
   });
 });

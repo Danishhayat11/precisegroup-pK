@@ -69,6 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [companyLoading, setCompanyLoading] = useState(false);
 
+  /** Shape returned by the `user_roles` select. */
+  type RoleRow = { role: AppRole };
+
+  /** Shape returned by the `profiles` select. */
+  type ProfileRow = { company_id: string | null };
+
+  /** Shape returned by the `companies` select with the specific columns we request. */
+  type CompanyRow = {
+    name: string | null;
+    plan: string | null;
+    onboarding_completed_at: string | null;
+    approval_status: string | null;
+    is_active: boolean | null;
+    rejection_reason: string | null;
+  };
+
   const loadRolesAndCompany = async (uid: string) => {
     setCompanyLoading(true);
     try {
@@ -76,29 +92,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from("user_roles").select("role").eq("user_id", uid),
         supabase.from("profiles").select("company_id").eq("id", uid).maybeSingle(),
       ]);
-      setRoles((rolesRes.data ?? []).map((r: any) => r.role as AppRole));
-      const cid = (profRes.data as any)?.company_id ?? null;
+      const roleRows = (rolesRes.data ?? []) as RoleRow[];
+      setRoles(roleRows.map((r) => r.role));
+      const profile = profRes.data as ProfileRow | null;
+      const cid = profile?.company_id ?? null;
       setCompanyId(cid);
       if (cid) {
-        const { data: co } = await supabase
+        const { data } = await supabase
           .from("companies")
           .select(
             "name, plan, onboarding_completed_at, approval_status, is_active, rejection_reason",
           )
           .eq("id", cid)
           .maybeSingle();
-        setCompanyName((co as any)?.name ?? null);
-        setPlan(((co as any)?.plan ?? null) as Plan | null);
+        const co = data as CompanyRow | null;
+        setCompanyName(co?.name ?? null);
+        setPlan((co?.plan ?? null) as Plan | null);
         // Treat the shared seed company as "already onboarded" — the wizard
         // only kicks in for freshly bootstrapped, single-tenant companies.
         const completed =
-          cid === SEED_COMPANY_ID ? true : Boolean((co as any)?.onboarding_completed_at);
+          cid === SEED_COMPANY_ID ? true : Boolean(co?.onboarding_completed_at);
         setOnboardingCompleted(completed);
         setApprovalStatus(
-          ((co as any)?.approval_status ?? "approved") as "pending" | "approved" | "rejected",
+          (co?.approval_status ?? "approved") as "pending" | "approved" | "rejected",
         );
-        setIsCompanyActive(Boolean((co as any)?.is_active ?? true));
-        setRejectionReason(((co as any)?.rejection_reason ?? null) as string | null);
+        setIsCompanyActive(Boolean(co?.is_active ?? true));
+        setRejectionReason(co?.rejection_reason ?? null);
       } else {
         setCompanyName(null);
         setPlan(null);

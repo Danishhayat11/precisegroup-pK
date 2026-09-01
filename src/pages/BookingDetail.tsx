@@ -5,8 +5,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge, statusTone } from "@/components/StatusBadge";
 import { fmtDate, fmtPKR, maskCNIC } from "@/lib/format";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Printer, Calculator, Plus } from "lucide-react";
+import { ChevronLeft, Printer, Calculator, Plus, ArrowRightLeft, Loader2, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BookingDocumentEditor from "@/components/BookingDocumentEditor";
 import DocumentVault from "@/components/DocumentVault";
 import { PaymentHistoryButton } from "@/components/PaymentHistoryDialog";
@@ -17,7 +29,7 @@ import { RestructurePlanButton } from "@/components/RestructurePlanDialog";
 import { AdjustmentFormDialog } from "@/components/AdjustmentForm";
 import { usePIIGuardedQuery, AccessDenied } from "@/lib/access";
 import { callRpc } from "@/integrations/supabase/approvedRpc";
-
+import { EditPaymentDialog } from "@/components/EditPaymentDialog";
 export default function BookingDetail() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
@@ -286,6 +298,7 @@ export default function BookingDetail() {
                 <th className="text-left px-4 py-2 font-medium">Account</th>
                 <th className="text-right px-4 py-2 font-medium">Amount</th>
                 <th className="text-right px-4 py-2 font-medium">Safe Cash</th>
+                <th className="text-right px-4 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -304,6 +317,15 @@ export default function BookingDetail() {
                   <td className="px-4 py-2 text-right tabular-nums">{fmtPKR(p.amount)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">
                     {fmtPKR(p.safe_cash_amount)}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <AdminOnly>
+                      <div className="flex items-center justify-end gap-2">
+                        <ReallocatePaymentDropdown payment={p} ledger={ledgerWithStatus} bookingId={b.booking_id} />
+                        <EditPaymentDialog payment={p} bookingId={b.booking_id} />
+                        <DeletePaymentDialog payment={p} bookingId={b.booking_id} />
+                      </div>
+                    </AdminOnly>
                   </td>
                 </tr>
               ))}
@@ -329,5 +351,137 @@ function Row({ k, v }: { k: string; v: any }) {
       <dt className="text-muted-foreground text-xs">{k}</dt>
       <dd className="text-right">{v ?? "—"}</dd>
     </div>
+  );
+}
+
+function ReallocatePaymentDropdown({ payment, ledger, bookingId }: { payment: any; ledger: any[]; bookingId: string }) {
+  const qc = useQueryClient();
+  const [moving, setMoving] = useState(false);
+
+  // Allow selecting ANY ledger term (even if fully paid) so they can easily fix misallocations
+  const targets = ledger;
+
+  if (targets.length === 0) return null;
+
+  const handleMove = async (targetRow: any) => {
+    setMoving(true);
+    try {
+      let headLabel = "Installment";
+      if (/possession/i.test(targetRow.particulars ?? "")) headLabel = "Possession";
+      if (/down/i.test(targetRow.particulars ?? "")) headLabel = "Downpayment";
+      
+      const patch = {
+        payment_date: payment.payment_date,
+        payment_mode: payment.payment_mode,
+        payment_head: headLabel,
+        amount: payment.amount,
+        account: payment.account || "",
+        cheque_txn_no: payment.cheque_txn_no || "",
+        posted_by: payment.posted_by || "",
+        received_from: payment.received_from || "",
+        remarks: `Moved to ${headLabel} via Quick Action`,
+      };
+
+      const { error } = await callRpc("admin_edit_payment", {
+        _receipt_no: payment.receipt_no,
+        _patch: patch,
+        _reason: `Quick-moved to ${targetRow.particulars || headLabel}`,
+        _allocations: [
+          {
+            ledger_id: targetRow.ledger_id,
+            head_label: headLabel,
+            amount: payment.amount,
+          },
+        ],
+      });
+
+      if (error) throw error;
+      toast({ title: `Payment moved to ${headLabel}` });
+      qc.invalidateQueries({ queryKey: ["booking", bookingId] });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Move failed", description: e.message });
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80"
+          disabled={moving}
+          title="Reallocate Payment"
+        >
+          {moving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />}
+          Reallocate
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 max-h-64 overflow-y-auto">
+        {targets.map((t: any) => (
+          <DropdownMenuItem key={t.ledger_id} onClick={() => handleMove(t)}>
+            To: {t.particulars || "Unnamed Term"} 
+            {t._remaining > 0 ? ` (Due: ${fmtPKR(t._remaining)})` : ""}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DeletePaymentDialog({ payment, bookingId }: { payment: any; bookingId: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await callRpc("admin_delete_payment", {
+        _receipt_no: payment.receipt_no,
+        _reason: "Deleted by Super Admin via Quick Action",
+      });
+
+      if (error) throw error;
+      toast({ title: "Payment deleted successfully" });
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["booking", bookingId] });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Delete failed", description: e.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="h-7 w-7 p-0 rounded-full"
+          title="Delete Payment"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Payment</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to completely delete receipt {payment.receipt_no} for {fmtPKR(payment.amount)}? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Confirm Delete
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
