@@ -2122,7 +2122,6 @@ describe("Documents E2E — swap-leak artifact writer self-check", () => {
     // Synthetic leak: an Arcade render that still contains "Manal Heights"
     // — exactly the shape the real fleet-wide test would flag.
     const syntheticHtml = renderToStaticMarkup(
-      // eslint-disable-next-line react/no-unknown-property
       (
         <div>
           <h1>Sample doc</h1>

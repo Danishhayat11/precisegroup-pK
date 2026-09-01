@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* allow-raw-color-file: cash-integrity and diagnostic banners use amber/emerald/red palette pending status-token migration
  * Tracked debt: migrate to semantic status tokens (bg-success, bg-warning,
  * bg-destructive, bg-info) in follow-up. Guardrail (scripts/ci/no-hex-in-
@@ -1129,17 +1128,21 @@ function DashboardInner() {
   const [waMessage, setWaMessage] = useState("");
   const [tplOpen, setTplOpen] = useState(false);
   const [tplDraft, setTplDraft] = useState(waTemplate);
-  const DRILL_KEYS = [
-    "sell",
-    "cash",
-    "adj_approved",
-    "adj_realised",
-    "commission",
-    "received",
-    "pending",
-    "overdue",
-    "cancelled",
-  ] as const;
+  const DRILL_KEYS = useMemo(
+    () =>
+      [
+        "sell",
+        "cash",
+        "adj_approved",
+        "adj_realised",
+        "commission",
+        "received",
+        "pending",
+        "overdue",
+        "cancelled",
+      ] as const,
+    [],
+  );
   // Defensive URL param reader — never throws even if window.location is malformed.
   const readUrlParam = (key: string): string | null => {
     if (typeof window === "undefined") return null;
@@ -1506,7 +1509,7 @@ function DashboardInner() {
     } catch (err) {
       console.error("[localStorage] write error", err);
     }
-  }, []);
+  }, [DRILL_KEYS]);
 
   // URL sync effect lives after overdueSort/page/pageSize declarations below.
   // Named filter presets (Risk + Overdue Age) — persisted in localStorage
