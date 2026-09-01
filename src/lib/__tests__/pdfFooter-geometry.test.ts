@@ -44,7 +44,7 @@ function makeFakePdf(opts: { pageCount: number; w: number; h: number }) {
   return pdf;
 }
 
-const FORMULA = "Total Received = Cash + Adjustment Approved \u2212 Commission Paid";
+const FORMULA = "Total Received = Cash + Asset Realized \u2212 Commission Paid";
 
 // (label, width, height) — pt units, jsPDF's default for "pt"
 const PAGE_SIZES: Array<[string, number, number]> = [

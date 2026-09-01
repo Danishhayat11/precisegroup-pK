@@ -2,7 +2,7 @@
 // Total Received identity (Cash − Adjustment Approved − Commission) can be
 // verified by automated tests independent of the React component.
 //
-// Business rule: Total Received = Cash/Bank + Adjustment Approved - Commission Paid.
+// Business rule: Total Received = Cash/Bank + Asset Realized - Commission Paid.
 // Adj. Realised remains as a separate KPI for reporting only.
 
 export type BookingLike = { dealer_commission_amount?: number | string | null };
@@ -34,7 +34,7 @@ export function sumCommissionPaid(bookings: BookingLike[]): number {
 }
 
 /**
- * Total Received (Net Company View) = Cash/Bank + Adjustment Approved − Commission Paid.
+ * Total Received (Net Company View) = Cash/Bank + Asset Realized − Commission Paid.
  */
 export function computeTotalReceived(input: {
   bookings: BookingLike[];
@@ -52,9 +52,9 @@ export function computeTotalReceived(input: {
   const adjApproved = sumAdjApproved(input.adjustments);
   const commissionPaid = sumCommissionPaid(input.bookings);
 
-  // Business Rule: Total Received = Cash/Bank + Adjustment Approved − Commission Paid.
+  // Business Rule: Total Received = Cash/Bank + Asset Realized − Commission Paid.
   // We use strict 2-decimal rounding to prevent floating-point drift.
-  const val = cashRecovered + adjApproved - commissionPaid;
+  const val = cashRecovered + adjRealised - commissionPaid;
   const totalReceived = Math.round((val + Number.EPSILON) * 100) / 100;
 
   return {

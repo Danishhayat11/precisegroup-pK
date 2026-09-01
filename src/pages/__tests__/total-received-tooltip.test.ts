@@ -8,7 +8,7 @@ const DASHBOARD = resolve(here, "../../pages/Dashboard.tsx");
 
 // Exact formula text shown in the Total Received tooltip. The unicode
 // character is U+2212 MINUS SIGN, not an ASCII hyphen — keep it identical.
-const FORMULA = "Cash + Adjustment Approved \u2212 Commission Paid";
+const FORMULA = "Cash + Asset Realized \u2212 Commission Paid";
 
 describe("Total Received tooltip", () => {
   const source = readFileSync(DASHBOARD, "utf8");
@@ -17,7 +17,7 @@ describe("Total Received tooltip", () => {
     // The Dashboard renders TooltipContent dynamically from KPI_FORMULAS[key].short.
     // Verify the `received` entry carries the canonical formula string verbatim.
     expect(source).toMatch(
-      /received:\s*\{[^}]*short:\s*"Cash \+ Adjustment Approved \u2212 Commission Paid"/,
+      /received:\s*\{[^}]*short:\s*"Cash \+ Asset Realized \u2212 Commission Paid"/,
     );
   });
 
@@ -46,6 +46,6 @@ describe("Total Received tooltip", () => {
     expect(FORMULA).toContain("\u2212");
     expect(source).toContain(FORMULA);
     // Guard against an ASCII-hyphen regression sneaking into the same line.
-    expect(source).not.toMatch(/Cash \+ Adjustment Approved - Commission Paid/);
+    expect(source).not.toMatch(/Cash \+ Asset Realized - Commission Paid/);
   });
 });

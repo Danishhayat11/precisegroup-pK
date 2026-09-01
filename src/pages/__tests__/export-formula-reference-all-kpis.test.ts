@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 const SRC = readFileSync(resolve(__dirname, "../Dashboard.tsx"), "utf8");
 
 const CSV_ROWS: Array<[string, string]> = [
-  ["Total Received", "Cash Recovered + Adjustment Approved \\u2212 Commission Paid"],
+  ["Total Received", "Cash Recovered + Asset Realized \\u2212 Commission Paid"],
   ["Cash Recovered", "Sum of cash receipts (excludes adjustments)"],
   ["Total Adjustment Realised", "Sum of approved adjustments marked realised"],
   ["Commission Paid", "Sum of commission payouts in range"],
@@ -29,12 +29,12 @@ describe("Dashboard exports — formula reference for all monetary KPIs", () => 
   it("PDF metadata keywords reference each monetary KPI in the Total Received formula", () => {
     // keywords string mentions the four KPIs by name in the formula
     expect(SRC).toMatch(
-      /keywords:[\s\S]{0,400}Total Received = Cash \+ Adjustment Approved \\u2212 Commission Paid/,
+      /keywords:[\s\S]{0,400}Total Received = Cash \+ Asset Realized \\u2212 Commission Paid/,
     );
   });
 
   it("PDF per-page footer note (U+2212) is stamped on every page via helper", () => {
-    expect(SRC).toContain('"Total Received = Cash + Adjustment Approved \\u2212 Commission Paid');
+    expect(SRC).toContain('"Total Received = Cash + Asset Realized \\u2212 Commission Paid');
     expect(SRC).toMatch(/stampFormulaFooter\(pdf,\s*formulaNote/);
   });
 
@@ -43,7 +43,7 @@ describe("Dashboard exports — formula reference for all monetary KPIs", () => 
     expect(start).toBeGreaterThan(-1);
     const block = SRC.slice(start, start + 1200);
     expect(block).toMatch(
-      /received:\s*\{\s*short:\s*"Cash \+ Adjustment Approved − Commission Paid"/,
+      /received:\s*\{\s*short:\s*"Cash \+ Asset Realized − Commission Paid"/,
     );
     // each of the four keys must be present
     for (const key of ["cash", "adj_realised", "commission", "received"]) {

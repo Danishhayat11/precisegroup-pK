@@ -7,7 +7,7 @@ import {
   sumCommissionPaid,
 } from "../totals";
 
-describe("computeTotalReceived — Cash + Adjustment Approved − Commission identity", () => {
+describe("computeTotalReceived — Cash + Asset Realized − Commission identity", () => {
   it("matches the formula on a simple mocked set", () => {
     const bookings = [
       { dealer_commission_amount: 50_000 },

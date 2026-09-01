@@ -2737,7 +2737,7 @@ function DashboardInner() {
         sections.push("FORMULA REFERENCE");
         sections.push(["Metric", "Formula"].map(csvCell).join(","));
         [
-          ["Total Received", "Cash Recovered + Adjustment Approved \u2212 Commission Paid"],
+          ["Total Received", "Cash Recovered + Asset Realized \u2212 Commission Paid"],
           ["Cash Recovered", "Sum of cash receipts (excludes adjustments)"],
           ["Total Adjustment Realised", "Sum of approved adjustments marked realised"],
           ["Commission Paid", "Sum of commission payouts in range"],
@@ -2803,13 +2803,13 @@ function DashboardInner() {
       const imgData = canvas.toDataURL("image/jpeg", 0.92);
       const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
       const formulaNote =
-        "Total Received = Cash + Adjustment Approved \u2212 Commission Paid  ·  Pending = max(Sell \u2212 (Cash + Approved Adj), 0)";
+        "Total Received = Cash + Asset Realized \u2212 Commission Paid  ·  Pending = max(Sell \u2212 (Cash + Approved Adj), 0)";
       pdf.setProperties({
         title: `Precise Realtors Dashboard — ${rangeLabel}`,
         subject: includeFormulaRef ? formulaNote : `Precise Realtors Dashboard — ${rangeLabel}`,
         author: "Precise Realtors & Builders",
         keywords: includeFormulaRef
-          ? "dashboard, KPI, Total Received = Cash + Adjustment Approved \u2212 Commission Paid"
+          ? "dashboard, KPI, Total Received = Cash + Asset Realized \u2212 Commission Paid"
           : "dashboard, KPI",
         creator: "Precise ERP",
       });
@@ -3410,8 +3410,8 @@ function DashboardInner() {
               spoken: "Sum of dealer commission payouts",
             },
             received: {
-              short: "Cash + Adjustment Approved − Commission Paid",
-              spoken: "Cash plus Adjustment Approved minus Commission Paid",
+              short: "Cash/Bank + Asset Realized − Commission Paid",
+              spoken: "Cash/Bank plus Asset Realized minus Commission Paid",
             },
             pending: {
               short: "Active bookings unpaid balance (excludes cancelled balances)",

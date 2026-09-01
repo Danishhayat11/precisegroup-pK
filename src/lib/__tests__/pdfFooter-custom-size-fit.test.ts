@@ -45,7 +45,7 @@ function makeFakePdf(opts: { pageCount: number; w: number; h: number }) {
   return pdf;
 }
 
-const FORMULA = "Total Received = Cash + Adjustment Approved \u2212 Commission Paid";
+const FORMULA = "Total Received = Cash + Asset Realized \u2212 Commission Paid";
 
 // (label, w_pt, h_pt) — non-standard page sizes a caller might pass to jsPDF.
 // Includes tall/narrow, wide/short, square, and a tiny custom thumbnail size

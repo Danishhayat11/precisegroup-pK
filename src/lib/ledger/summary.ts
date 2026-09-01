@@ -36,7 +36,7 @@ export function buildBookingSummary({
       if (!isAdjustment) {
         total_received += t.credit;
       } else {
-        // Business Rule: Total Received = Cash + Adjustment Approved - Commission Paid.
+        // Business Rule: Total Received = Cash + Asset Realized - Commission Paid.
         // We include realized value of adjustments in the total received figure.
         total_received += Number(t.meta?.realized_value) || 0;
       }

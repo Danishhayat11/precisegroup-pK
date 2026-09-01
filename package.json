@@ -14,7 +14,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:full": "vitest run",
     "fuzz:replay": "node scripts/ci/fuzz-replay.mjs",
