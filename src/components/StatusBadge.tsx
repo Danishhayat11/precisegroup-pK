@@ -3,12 +3,16 @@ import { cn } from "@/lib/utils";
 type Tone = "success" | "warning" | "danger" | "info" | "muted" | "adjustment";
 
 const tones: Record<Tone, string> = {
-  success: "bg-success/12 text-success border border-success/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-  warning: "bg-warning/12 text-warning border border-warning/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-  danger: "bg-destructive/12 text-destructive border border-destructive/30 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+  success:
+    "bg-success/12 text-success border border-success/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+  warning:
+    "bg-warning/12 text-warning border border-warning/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+  danger:
+    "bg-destructive/12 text-destructive border border-destructive/30 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
   info: "bg-primary/10 text-primary border border-primary/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
   muted: "bg-muted/80 text-muted-foreground border border-border/70 backdrop-blur-xs",
-  adjustment: "bg-adjustment/12 text-adjustment border border-adjustment/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+  adjustment:
+    "bg-adjustment/12 text-adjustment border border-adjustment/25 backdrop-blur-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
 };
 
 export function StatusBadge({ label, tone = "muted" }: { label: string; tone?: Tone }) {

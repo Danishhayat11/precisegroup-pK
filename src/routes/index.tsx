@@ -11,13 +11,12 @@ import { supabase } from "@/integrations/supabase/client";
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
-    
+
     if (data?.session) {
       throw redirect({ to: "/dashboard" });
     }
-    
+
     logRedirectReason("root_marketing_redirect", { from: "/", to: "/site" });
     throw redirect({ to: "/site", statusCode: 301 });
   },
 });
-

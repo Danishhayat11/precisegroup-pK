@@ -38,13 +38,13 @@ export default function Reports() {
       const allowedBookingIds = new Set(b.map((r: any) => r.booking_id));
       const p = projectName
         ? payments.filter(
-          (r: any) => r.project === projectName || allowedBookingIds.has(r.booking_id),
-        )
+            (r: any) => r.project === projectName || allowedBookingIds.has(r.booking_id),
+          )
         : payments;
       const l = projectName
         ? ledger.filter(
-          (r: any) => r.project === projectName || allowedBookingIds.has(r.booking_id),
-        )
+            (r: any) => r.project === projectName || allowedBookingIds.has(r.booking_id),
+          )
         : ledger;
       return { bookings: b, payments: p, ledger: l, dealers };
     },
@@ -201,17 +201,22 @@ export default function Reports() {
                 )
                 .map((b: any) => (
                   <tr key={b.booking_id} className="hover:bg-muted/40 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-xs text-primary font-medium">{b.booking_id}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-primary font-medium">
+                      {b.booking_id}
+                    </td>
                     <td className="px-4 py-2.5 capitalize font-medium">{b.client_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{b.unit_id}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                      {b.unit_id}
+                    </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide ${String(b.booking_status ?? "").toLowerCase() === "cancelled"
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide ${
+                          String(b.booking_status ?? "").toLowerCase() === "cancelled"
                             ? "bg-destructive/10 text-destructive border border-destructive/20"
                             : String(b.booking_status ?? "").toLowerCase() === "active"
                               ? "bg-success/10 text-success border border-success/20"
                               : "bg-muted text-muted-foreground border border-border"
-                          }`}
+                        }`}
                       >
                         {b.booking_status || "Active"}
                       </span>
@@ -226,10 +231,7 @@ export default function Reports() {
                       {fmtPKR(b.remaining_balance)}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <PaymentHistoryButton
-                        bookingId={b.booking_id}
-                        label="Print Statement"
-                      />
+                      <PaymentHistoryButton bookingId={b.booking_id} label="Print Statement" />
                     </td>
                   </tr>
                 ))}
@@ -253,9 +255,14 @@ function ReportCard({ title, rows }: { title: string; rows: { label: string; val
           <div className="p-6 text-center text-sm text-muted-foreground">No data</div>
         ) : (
           rows.map((r) => (
-            <div key={r.label} className="flex items-center justify-between px-5 py-3 text-sm hover:bg-muted/40 transition-colors">
+            <div
+              key={r.label}
+              className="flex items-center justify-between px-5 py-3 text-sm hover:bg-muted/40 transition-colors"
+            >
               <span className="text-muted-foreground">{r.label}</span>
-              <span className="tabular-nums font-semibold font-mono text-foreground">{r.value}</span>
+              <span className="tabular-nums font-semibold font-mono text-foreground">
+                {r.value}
+              </span>
             </div>
           ))
         )}

@@ -241,9 +241,7 @@ export function TeamModal({
                   Executive Sartorial Style &amp; Poise
                 </h4>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {member.attire}
-              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{member.attire}</p>
             </div>
 
             {/* Quick Action Bar */}
@@ -260,24 +258,14 @@ export function TeamModal({
                 </a>
               </Button>
 
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-10 font-medium"
-              >
+              <Button asChild variant="outline" size="sm" className="min-h-10 font-medium">
                 <a href={`tel:${member.phone}`} className="inline-flex items-center gap-2">
                   <Phone className="w-4 h-4 text-primary" />
                   {member.phone}
                 </a>
               </Button>
 
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-10 font-medium"
-              >
+              <Button asChild variant="outline" size="sm" className="min-h-10 font-medium">
                 <a href={`mailto:${member.email}`} className="inline-flex items-center gap-2">
                   <Mail className="w-4 h-4 text-primary" />
                   {member.email}

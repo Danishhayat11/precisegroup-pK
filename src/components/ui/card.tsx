@@ -8,7 +8,7 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
       ref={ref}
       className={cn(
         "rounded-[20px] bg-card text-card-foreground",
-        // Apple-style Card design: 
+        // Apple-style Card design:
         // 1. Organic drop shadow (not too harsh)
         // 2. Subtle translucent border (glass edge)
         // 3. Inner 1px light reflection for depth

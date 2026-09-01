@@ -51,6 +51,7 @@ export type ProjectDetail = {
   specs: { label: string; value: string }[];
   videoUrl?: string;
   videoTitle?: string;
+  reels?: { url: string; title: string }[];
   paymentPlan: {
     downPayment: string;
     installments: string;
@@ -76,6 +77,12 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     status: "Bookings Open · Limited Units Available",
     videoUrl: "https://www.facebook.com/share/v/18hJQwxFdK/?mibextid=wwXIfr",
     videoTitle: "Official 3D Architectural Reel & Building Showcase",
+    reels: [
+      {
+        title: "Construction Update & Site Visit",
+        url: "https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fv%2F18hJQwxFdK%2F%3Fmibextid%3DwwXIfr&show_text=false&width=350",
+      },
+    ],
     images: [
       manalHeightsUltra,
       manalHeightsElevation,
@@ -129,6 +136,16 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     floors: "Lower Ground + Ground + 5 Floors",
     completion: "Ready / Near Possession",
     status: "Delivered & Handing Over",
+    reels: [
+      {
+        title: "Commercial Highlights",
+        url: "https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fv%2F18hJQwxFdK%2F%3Fmibextid%3DwwXIfr&show_text=false&width=350",
+      },
+      {
+        title: "Retail Space Overview",
+        url: "https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fv%2F18hJQwxFdK%2F%3Fmibextid%3DwwXIfr&show_text=false&width=350",
+      },
+    ],
     images: [
       "/src/assets/site/commercial-tower-nexus.jpg",
       "/src/assets/site/project-arcade.webp",
@@ -179,6 +196,12 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     floors: "Basement + Ground + 1st Floor + Rooftop Lounge",
     completion: "December 2026",
     status: "Under Construction (Finishing Stage)",
+    reels: [
+      {
+        title: "Villa Walkthrough",
+        url: "https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fv%2F18hJQwxFdK%2F%3Fmibextid%3DwwXIfr&show_text=false&width=350",
+      },
+    ],
     images: [
       "/src/assets/site/luxury-villa-margalla.jpg",
       "/src/assets/site/project-villa.webp",
@@ -328,30 +351,29 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     floors: "12th Floor",
     completion: "Ready to Move",
     status: "Available",
-    images: [
-      "/src/assets/site/project-tower.webp"
-    ],
-    description: "This is a placeholder description for a real project from Facebook. You can replace this text with the actual project details, highlights, and amenities later. It serves as a visual layout reference.",
+    images: ["/src/assets/site/project-tower.webp"],
+    description:
+      "This is a placeholder description for a real project from Facebook. You can replace this text with the actual project details, highlights, and amenities later. It serves as a visual layout reference.",
     highlights: [
       "[Placeholder Highlight 1: e.g. Smart Home Features]",
       "[Placeholder Highlight 2: e.g. Panoramic City Views]",
-      "[Placeholder Highlight 3: e.g. Dedicated Parking]"
+      "[Placeholder Highlight 3: e.g. Dedicated Parking]",
     ],
     amenities: [
       "[Placeholder Amenity 1: Swimming Pool]",
       "[Placeholder Amenity 2: Gym]",
-      "[Placeholder Amenity 3: 24/7 Security]"
+      "[Placeholder Amenity 3: 24/7 Security]",
     ],
     specs: [
       { label: "Plot Size", value: "N/A" },
-      { label: "Built-up Area", value: "1,500 sq. ft." }
+      { label: "Built-up Area", value: "1,500 sq. ft." },
     ],
     paymentPlan: {
       downPayment: "20% Initial Payment",
       installments: "48 Monthly Installments",
       possession: "On Completion",
-      duration: "4 Years"
-    }
+      duration: "4 Years",
+    },
   },
   "fb-project-2": {
     id: "fb-project-2",
@@ -365,27 +387,24 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     floors: "Ground + 2",
     completion: "Under Construction",
     status: "Booking Open",
-    images: [
-      "/src/assets/site/project-commercial.webp"
-    ],
-    description: "This is another placeholder for a Facebook project. Replace this description with the real commercial project details, ensuring the structure matches your luxury brand.",
+    images: ["/src/assets/site/project-commercial.webp"],
+    description:
+      "This is another placeholder for a Facebook project. Replace this description with the real commercial project details, ensuring the structure matches your luxury brand.",
     highlights: [
       "[Placeholder Highlight: High Footfall Area]",
-      "[Placeholder Highlight: Corner Plot Advantage]"
+      "[Placeholder Highlight: Corner Plot Advantage]",
     ],
     amenities: [
       "[Placeholder Amenity: Backup Generators]",
-      "[Placeholder Amenity: High Speed Elevators]"
+      "[Placeholder Amenity: High Speed Elevators]",
     ],
-    specs: [
-      { label: "Commercial Area", value: "5,000 sq. ft." }
-    ],
+    specs: [{ label: "Commercial Area", value: "5,000 sq. ft." }],
     paymentPlan: {
       downPayment: "30% Initial Payment",
       installments: "Quarterly Installments",
       possession: "2027",
-      duration: "3 Years"
-    }
+      duration: "3 Years",
+    },
   },
   "fb-project-3": {
     id: "fb-project-3",
@@ -401,28 +420,22 @@ export const SITE_PROJECTS: Record<string, ProjectDetail> = {
     floors: "Basement + Ground + 1",
     completion: "Ready for Possession",
     status: "Sold Out",
-    images: [
-      "/src/assets/site/project-villa.webp"
-    ],
-    description: "A final placeholder for a luxury villa project from your Facebook page. Replace the text and images to quickly integrate the real project into your pristine portfolio.",
+    images: ["/src/assets/site/project-villa.webp"],
+    description:
+      "A final placeholder for a luxury villa project from your Facebook page. Replace the text and images to quickly integrate the real project into your pristine portfolio.",
     highlights: [
       "[Placeholder Highlight: Golf Course Facing]",
-      "[Placeholder Highlight: Italian Kitchen]"
+      "[Placeholder Highlight: Italian Kitchen]",
     ],
-    amenities: [
-      "[Placeholder Amenity: Private Pool]",
-      "[Placeholder Amenity: Servant Quarters]"
-    ],
-    specs: [
-      { label: "Land Area", value: "1 Kanal" }
-    ],
+    amenities: ["[Placeholder Amenity: Private Pool]", "[Placeholder Amenity: Servant Quarters]"],
+    specs: [{ label: "Land Area", value: "1 Kanal" }],
     paymentPlan: {
       downPayment: "100% Upfront",
       installments: "N/A",
       possession: "Immediate",
-      duration: "Ready"
-    }
-  }
+      duration: "Ready",
+    },
+  },
 };
 
 export function ProjectDetailModal({
@@ -646,39 +659,54 @@ export function ProjectDetailModal({
                       {project.videoTitle || "Experience the 3D Architectural Walkthrough"}
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      Watch the high-definition architectural flythrough, retail atrium, and luxury apartment interiors.
+                      Watch the high-definition architectural flythrough, retail atrium, and luxury
+                      apartment interiors.
                     </p>
                   </div>
                   <Button
                     asChild
                     className="min-h-12 shrink-0 rounded-full bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-lg gap-2 transition-all hover:scale-105"
                   >
-                    <a
-                      href={project.videoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
+                    <a href={project.videoUrl} target="_blank" rel="noopener noreferrer">
                       <Play className="w-4 h-4 fill-black" />
                       Watch 3D Video
                       <ExternalLink className="w-3.5 h-3.5 opacity-70" />
                     </a>
                   </Button>
                 </div>
-                {/* Embed Facebook Reel if it's the Manal Heights Video */}
-                {project.id === "manal-heights" && (
-                  <div className="mt-6 flex justify-center w-full overflow-hidden rounded-xl bg-black">
-                    <iframe 
-                      src="https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fv%2F18hJQwxFdK%2F%3Fmibextid%3DwwXIfr&show_text=false&width=500" 
-                      width="500" 
-                      height="889" 
-                      style={{ border: "none", overflow: "hidden", maxWidth: "100%", maxHeight: "70vh" }} 
-                      scrolling="no" 
-                      frameBorder="0" 
-                      allowFullScreen={true} 
-                      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                    ></iframe>
-                  </div>
-                )}
+              </div>
+            )}
+
+            {/* Facebook Reels / Short Videos */}
+            {project.reels && project.reels.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="text-lg font-bold text-foreground">Featured Reels & Updates</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {project.reels.map((reel, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm overflow-hidden"
+                    >
+                      <p className="text-sm font-semibold text-center text-foreground">
+                        {reel.title}
+                      </p>
+                      <div
+                        className="flex justify-center bg-black rounded-lg overflow-hidden relative"
+                        style={{ paddingTop: "177.77%" /* 16:9 aspect ratio */ }}
+                      >
+                        <iframe
+                          src={reel.url}
+                          className="absolute top-0 left-0 w-full h-full"
+                          style={{ border: "none" }}
+                          scrolling="no"
+                          frameBorder="0"
+                          allowFullScreen={true}
+                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                        ></iframe>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

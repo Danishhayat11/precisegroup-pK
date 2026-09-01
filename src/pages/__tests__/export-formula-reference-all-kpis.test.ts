@@ -34,9 +34,7 @@ describe("Dashboard exports — formula reference for all monetary KPIs", () => 
   });
 
   it("PDF per-page footer note (U+2212) is stamped on every page via helper", () => {
-    expect(SRC).toContain(
-      '"Total Received = Cash + Adjustment Realised \\u2212 Commission Paid',
-    );
+    expect(SRC).toContain('"Total Received = Cash + Adjustment Realised \\u2212 Commission Paid');
     expect(SRC).toMatch(/stampFormulaFooter\(pdf,\s*formulaNote/);
   });
 

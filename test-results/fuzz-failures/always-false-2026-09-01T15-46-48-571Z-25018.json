@@ -1,0 +1,36 @@
+{
+  "property": "always-false",
+  "mode": "property",
+  "invariant": null,
+  "failed": true,
+  "interrupted": false,
+  "numRuns": 1,
+  "numShrinks": 1,
+  "numSkips": 0,
+  "seed": 7,
+  "counterexamplePath": "0:0",
+  "argNames": null,
+  "argFields": null,
+  "offendingField": null,
+  "counterexamplePretty": [
+    "\"x\\ty\""
+  ],
+  "counterexampleRaw": [
+    "x\ty"
+  ],
+  "lastSamples": [
+    [
+      "z"
+    ],
+    [
+      "x\ty"
+    ]
+  ],
+  "errorMessage": "Property failed by returning false",
+  "testFile": "src/lib/__tests__/support/__tests__/fuzzReporter.test.ts",
+  "shellReproduce": "node scripts/ci/fuzz-replay.mjs --seed 7 --path 0:0 --file /Users/danishhayat/Desktop/precisegroup-pk-main/src/lib/__tests__/support/__tests__/fuzzReporter.test.ts --name always-false",
+  "reproduce": "fc.assert(<property>, { seed: 7, path: \"0:0\", endOnFailure: true })",
+  "writtenAt": "2026-09-01T15:46:48.585Z",
+  "renderedInputFiles": [],
+  "renderedInputsPreview": {}
+}

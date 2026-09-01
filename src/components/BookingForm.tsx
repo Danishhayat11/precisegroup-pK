@@ -224,10 +224,13 @@ async function nextClientRef() {
     supabase.from("bookings").select("client_ref").like("client_ref", "CL-%"),
     supabase.from("clients").select("client_ref").like("client_ref", "CL-%"),
   ]);
-  const maxN = [...(bookingRefs ?? []), ...(clientRefs ?? [])].reduce((m, r: any) => {
-    const n = Number(String(r.client_ref ?? "").replace("CL-", ""));
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
+  const maxN = [...(bookingRefs ?? []), ...(clientRefs ?? [])].reduce(
+    (m, r: { client_ref: string | null }) => {
+      const n = Number(String(r.client_ref ?? "").replace("CL-", ""));
+      return Number.isFinite(n) && n > m ? n : m;
+    },
+    0,
+  );
   return `CL-${String(maxN + 1).padStart(5, "0")}`;
 }
 
@@ -312,7 +315,15 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
         .select("unit_id, unit_type, floor, size_sqft, base_rate, status, linked_booking_id")
         .eq("project_code", form.project_code)
         .order("unit_id", { ascending: true });
-      type UnitRow = { unit_id: string; unit_type: string; floor: string; size_sqft: number | null; base_rate: number | null; status: string | null; linked_booking_id: string | null };
+      type UnitRow = {
+        unit_id: string;
+        unit_type: string;
+        floor: string;
+        size_sqft: number | null;
+        base_rate: number | null;
+        status: string | null;
+        linked_booking_id: string | null;
+      };
       const rows = (data ?? []) as UnitRow[];
       return rows.filter(
         (u) =>
@@ -739,7 +750,15 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
             <Select
               value={form.unit_id}
               onValueChange={(id) => {
-                const u = availableUnits.find((x: { unit_id: string; unit_type?: string; floor?: string; size_sqft?: number | null; base_rate?: number | null }) => x.unit_id === id);
+                const u = availableUnits.find(
+                  (x: {
+                    unit_id: string;
+                    unit_type?: string;
+                    floor?: string;
+                    size_sqft?: number | null;
+                    base_rate?: number | null;
+                  }) => x.unit_id === id,
+                );
                 if (!u) {
                   set("unit_id", id);
                   return;
@@ -771,11 +790,18 @@ export function BookingForm({ initial, onSaved, onCancel }: BookingFormProps) {
                     No available units in this project.
                   </div>
                 ) : (
-                  availableUnits.map((u: { unit_id: string; unit_type?: string; floor?: string; size_sqft?: number | null }) => (
-                    <SelectItem key={u.unit_id} value={u.unit_id}>
-                      {u.unit_id} — {u.unit_type} · {u.floor} · {u.size_sqft} sqft
-                    </SelectItem>
-                  ))
+                  availableUnits.map(
+                    (u: {
+                      unit_id: string;
+                      unit_type?: string;
+                      floor?: string;
+                      size_sqft?: number | null;
+                    }) => (
+                      <SelectItem key={u.unit_id} value={u.unit_id}>
+                        {u.unit_id} — {u.unit_type} · {u.floor} · {u.size_sqft} sqft
+                      </SelectItem>
+                    ),
+                  )
                 )}
               </SelectContent>
             </Select>

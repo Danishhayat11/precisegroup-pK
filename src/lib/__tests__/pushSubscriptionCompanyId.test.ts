@@ -6,11 +6,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // without the Start AsyncLocalStorage context.
 vi.mock("@tanstack/react-start", () => {
   function makeBuilder() {
-    const state: { handler?: Function; validator?: (d: unknown) => unknown } = {};
+    const state: {
+      handler?: (...args: unknown[]) => unknown;
+      validator?: (d: unknown) => unknown;
+    } = {};
     const builder: {
       middleware: (m: unknown) => typeof builder;
       inputValidator: (v: (d: unknown) => unknown) => typeof builder;
-      handler: (h: Function) => (args: { data?: unknown; context: unknown }) => unknown;
+      handler: (
+        h: (...args: unknown[]) => unknown,
+      ) => (args: { data?: unknown; context: unknown }) => unknown;
     } = {
       middleware: () => builder,
       inputValidator: (v) => {

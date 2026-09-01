@@ -1,0 +1,16 @@
+Property "always-false" failed (mode: property).
+  runs=1  shrinks=1  skips=0  seed=7  path="0:0"
+Minimal counterexample (control chars escaped):
+  [0] "x\ty"
+Reproduce locally:
+  node scripts/ci/fuzz-replay.mjs --seed 7 --path 0:0 --file /Users/danishhayat/Desktop/precisegroup-pk-main/src/lib/__tests__/support/__tests__/fuzzReporter.test.ts --name always-false
+  fc.assert(<property>, { seed: 7, path: "0:0", endOnFailure: true })
+Original error:
+Error: Property failed by returning false
+    at Property.run (file:///Users/danishhayat/Desktop/precisegroup-pk-main/node_modules/fast-check/lib/fast-check.js:1303:66)
+    at runIt (file:///Users/danishhayat/Desktop/precisegroup-pk-main/node_modules/fast-check/lib/fast-check.js:2484:24)
+    at Module.check (file:///Users/danishhayat/Desktop/precisegroup-pk-main/node_modules/fast-check/lib/fast-check.js:2516:204)
+    at assertProperty (/Users/danishhayat/Desktop/precisegroup-pk-main/src/lib/__tests__/support/fuzzReporter.ts:845:21)
+    at /Users/danishhayat/Desktop/precisegroup-pk-main/src/lib/__tests__/support/__tests__/fuzzReporter.test.ts:149:7
+    at file:///Users/danishhayat/Desktop/precisegroup-pk-main/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///Users/danishhayat/Desktop/precisegroup-pk-main/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26

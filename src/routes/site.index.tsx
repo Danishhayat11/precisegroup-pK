@@ -857,13 +857,63 @@ function HomePage() {
         onOpenChange={(open) => !open && setSelectedProject(null)}
       />
 
+      {/* ================= SOFTWARE & ERP ================= */}
+      <Section
+        id="software"
+        aria-labelledby="software-heading"
+        className="border-t border-foreground/[0.10] bg-muted/20 pt-20 pb-24 sm:pt-24 sm:pb-28"
+      >
+        <motion.div
+          {...fade}
+          className="grid gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] md:items-center md:gap-14"
+        >
+          <div>
+            <Kicker>05 &mdash; Software Solution</Kicker>
+            <h2 id="software-heading" className="site-h2 mt-5 text-foreground">
+              Precise ERP: Powering <span className="italic">Real Estate.</span>
+            </h2>
+            <p className="site-lead mt-5">
+              Built by builders, for builders. Precise ERP is our proprietary enterprise resource
+              platform — now available as a multi-tenant solution for forward-thinking real estate
+              developers. Manage projects, inventory, leads, and financials all in one secure
+              platform.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Link
+                to="/signup"
+                className="lg-btn-primary lg-shine text-[11px] uppercase tracking-[0.22em] bg-[var(--gold)] text-black hover:bg-white hover:text-black border-none"
+              >
+                Register Your Company
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="relative aspect-[4/3] rounded-3xl overflow-hidden border border-border/80 shadow-2xl bg-card">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-background flex items-center justify-center">
+              <div className="text-center p-8">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-xl mb-6">
+                  <Sparkles className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Multi-Tenant Platform</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                  Join the growing network of modern builders managing their operations securely in
+                  the cloud with our free trial.
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </Section>
+
+      {/* ================= ENQUIRE ================= */}
       <Section className="border-t border-foreground/[0.10] pt-20 pb-24 sm:pt-24 sm:pb-28">
         <motion.div
           {...fade}
           className="grid gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] md:items-end md:gap-14"
         >
           <div>
-            <Kicker>05 &mdash; Enquire</Kicker>
+            <Kicker>06 &mdash; Enquire</Kicker>
             <h2 className="site-h2 mt-5 text-foreground">
               Let's build your <span className="italic">legacy together.</span>
             </h2>

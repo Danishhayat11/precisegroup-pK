@@ -26,13 +26,8 @@ import { callRpc } from "@/integrations/supabase/approvedRpc";
 const PAYMENT_HEADS = ["Downpayment", "Installment", "Possession", "Other"];
 const PAYMENT_MODES = ["Cash", "Online", "Cheque", "PayOrder", "Adjustment/Asset"];
 
-export function EditPaymentDialog({
-  payment,
-  bookingId,
-}: {
-  payment: any;
-  bookingId: string;
-}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function EditPaymentDialog({ payment, bookingId }: { payment: any; bookingId: string }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(payment.amount?.toString() || "");
@@ -69,7 +64,7 @@ export function EditPaymentDialog({
       setOpen(false);
       setReason(""); // reset
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toast({ variant: "destructive", title: "Edit failed", description: e.message });
     },
   });
@@ -77,7 +72,7 @@ export function EditPaymentDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
+        <Button // allow-small-tap: inline table action
           variant="outline"
           size="icon"
           className="h-7 w-7 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80"
@@ -99,19 +94,11 @@ export function EditPaymentDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Amount</Label>
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Payment Date</Label>
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
 
@@ -168,7 +155,9 @@ export function EditPaymentDialog({
           </div>
 
           <div className="space-y-2 border-t pt-4">
-            <Label>Reason for Edit <span className="text-red-500">*</span></Label>
+            <Label>
+              Reason for Edit <span className="text-red-500">*</span>
+            </Label>
             <Input
               placeholder="e.g. Corrected typo in amount"
               value={reason}

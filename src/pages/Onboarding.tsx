@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { toastError } from "@/lib/friendlyError";
-import { CheckCircle2, ChevronRight, Building2 } from "lucide-react";
+import { motion, AnimatePresence, Variants } from "framer-motion";
+import { CheckCircle2, ChevronRight, Building2, Sparkles, ArrowRight } from "lucide-react";
 
 const STEPS = ["Project", "Unit", "Review", "Booking"] as const;
 type StepIdx = 0 | 1 | 2 | 3;
@@ -214,6 +215,7 @@ export default function Onboarding() {
     setProjectErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
   };
   const setUnitField = <K extends UnitField>(k: K, v: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setUnit((u) => ({ ...u, [k]: v as any }));
     setUnitErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
   };
@@ -227,6 +229,7 @@ export default function Onboarding() {
 
   const finish = async (message: string) => {
     setBusy(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase.rpc as any)("mark_onboarding_complete");
     setBusy(false);
     if (error) {
@@ -279,6 +282,7 @@ export default function Onboarding() {
           notes: project.total_units ? `Planned total units: ${project.total_units}` : null,
         },
         companyId!,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ) as any,
     );
     setBusy(false);
@@ -343,6 +347,7 @@ export default function Onboarding() {
           status: "Available",
         },
         companyId!,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ) as any,
     );
     setBusy(false);
@@ -357,554 +362,612 @@ export default function Onboarding() {
     setStep(2);
   };
 
+  const variants: Variants = {
+    initial: { opacity: 0, y: 15, scale: 0.98 },
+    animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+    exit: { opacity: 0, y: -15, scale: 0.98, transition: { duration: 0.2 } },
+  };
+
   return (
-    <div className="min-h-dvh bg-background">
-      <div className="mx-auto max-w-2xl px-4 py-8 lg:py-14">
+    <div className="min-h-dvh flex items-center justify-center bg-background p-6">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background pointer-events-none" />
+
+      <div className="w-full max-w-[640px] relative z-10 py-10">
         {/* Header */}
-        <div className="flex items-center gap-2.5 mb-6">
-          <div className="h-9 w-9 rounded-xl bg-primary/15 grid place-items-center text-primary">
-            <Building2 className="h-5 w-5" aria-hidden="true" />
+        <div className="flex flex-col items-center text-center mb-10">
+          <div className="h-16 w-16 rounded-[20px] bg-primary text-primary-foreground shadow-2xl shadow-primary/20 flex items-center justify-center mb-6">
+            <Building2 className="h-8 w-8" aria-hidden="true" />
           </div>
-          <div>
-            <div className="font-semibold">{companyName ?? "Your workspace"}</div>
-            <div className="text-xs text-muted-foreground">Let's get you set up</div>
-          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            {companyName ?? "Your Workspace"}
+          </h1>
+          <p className="text-muted-foreground mt-3 text-[15px] max-w-[85%] mx-auto leading-relaxed">
+            Let's get your enterprise set up. We'll configure your first project and unit in under
+            two minutes.
+          </p>
         </div>
 
-        {/* Progress bar */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between text-xs mb-2">
-            <div className="font-medium">
-              Step {step + 1} of {STEPS.length}
-              <span className="text-muted-foreground"> — {STEPS[step]}</span>
-            </div>
-            <div className="text-muted-foreground">{Math.round(progressPct)}%</div>
-          </div>
-          <div
-            className="h-2 rounded-full bg-muted overflow-hidden"
-            role="progressbar"
-            aria-valuenow={step + 1}
-            aria-valuemin={1}
-            aria-valuemax={STEPS.length}
-          >
+        {/* Progress Timeline */}
+        <div className="mb-10 max-w-sm mx-auto">
+          <div className="flex items-center justify-between relative">
+            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-muted rounded-full" />
             <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 bg-primary rounded-full transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              style={{ width: `${(step / (STEPS.length - 1)) * 100}%` }}
             />
-          </div>
-          <ol className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            {STEPS.map((label, i) => (
-              <li
-                key={label}
-                className={
-                  "flex items-center gap-1.5 " + (i <= step ? "text-foreground font-medium" : "")
-                }
-              >
-                {i < step ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-                ) : (
-                  <span
-                    className={
-                      "h-4 w-4 rounded-full grid place-items-center text-[10px] " +
-                      (i === step ? "bg-primary text-primary-foreground" : "bg-muted")
-                    }
+            {STEPS.map((label, i) => {
+              const active = i === step;
+              const completed = i < step;
+              return (
+                <div key={label} className="relative z-10 flex flex-col items-center gap-2">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 shadow-sm ${
+                      active
+                        ? "bg-primary text-primary-foreground ring-4 ring-primary/20 scale-110"
+                        : completed
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                    }`}
                   >
-                    {i + 1}
+                    {completed ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+                  </div>
+                  <span
+                    className={`text-[10px] uppercase tracking-wider font-semibold absolute -bottom-5 whitespace-nowrap transition-colors duration-300 ${
+                      active || completed ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {label}
                   </span>
-                )}
-                {label}
-              </li>
-            ))}
-          </ol>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {pendingDraft && (
-          <Card
-            role="alertdialog"
-            aria-labelledby="resume-title"
-            aria-describedby="resume-desc"
-            className="p-5 lg:p-6 mb-4 border-primary/40 bg-primary/5"
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
           >
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-xl bg-primary/15 grid place-items-center text-primary shrink-0">
-                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 id="resume-title" className="font-semibold">
-                  Resume where you left off?
-                </h2>
-                <p id="resume-desc" className="text-sm text-muted-foreground mt-1">
-                  We saved your progress on{" "}
-                  <span className="font-medium text-foreground">
-                    Step {pendingDraft.step + 1} — {STEPS[pendingDraft.step]}
-                  </span>
-                  {pendingDraft.project.project_code ? (
-                    <>
-                      {" "}
-                      for project{" "}
-                      <span className="font-mono text-foreground">
-                        {pendingDraft.project.project_code}
-                      </span>
-                    </>
-                  ) : null}
-                  . Continue with those details, or start fresh.
-                </p>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <Button size="sm" className="min-h-11" onClick={resumeDraft}>
-                    Resume onboarding
-                  </Button>
-                  <Button size="sm" variant="outline" className="min-h-11" onClick={discardDraft}>
-                    Start over
-                  </Button>
+            <div
+              role="alertdialog"
+              className="rounded-3xl p-6 bg-primary/5 border border-primary/20 backdrop-blur-md"
+            >
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-[14px] bg-primary/15 grid place-items-center text-primary shrink-0">
+                  <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="font-semibold text-base">Resume where you left off?</h2>
+                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                    We saved your progress on{" "}
+                    <strong className="text-foreground font-medium">
+                      Step {pendingDraft.step + 1} — {STEPS[pendingDraft.step]}
+                    </strong>
+                    {pendingDraft.project.project_code
+                      ? ` for project ${pendingDraft.project.project_code}`
+                      : ""}
+                    . Continue with those details, or start fresh.
+                  </p>
+                  <div className="flex flex-wrap gap-2.5 mt-5">
+                    <Button onClick={resumeDraft} className="rounded-full shadow-md min-h-11 px-6">
+                      Resume onboarding
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={discardDraft}
+                      className="rounded-full bg-background/50 backdrop-blur-sm min-h-11 px-6"
+                    >
+                      Start over
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </Card>
+          </motion.div>
         )}
 
         {!pendingDraft && restoredStep !== null && (
-          <Card
-            role="status"
-            aria-live="polite"
-            className="p-4 lg:p-5 mb-4 border-primary/30 bg-primary/5"
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="mb-6"
           >
-            <div className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-lg bg-primary/15 grid place-items-center text-primary shrink-0">
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              </div>
-              <div className="flex-1 min-w-0 text-sm">
-                <div className="font-medium">
-                  Draft restored — you're back on{" "}
-                  <span className="text-primary">
-                    Step {restoredStep + 1}: {STEPS[restoredStep]}
-                  </span>
-                  .
-                </div>
-                <p className="text-muted-foreground mt-1">
-                  Your saved details are filled in below. Changes are saved automatically as you
-                  continue.
-                </p>
+            <div
+              role="status"
+              className="rounded-2xl p-4 bg-primary/5 border border-primary/20 backdrop-blur-md flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                <span className="text-sm font-medium">
+                  Draft restored — Step {restoredStep + 1}: {STEPS[restoredStep]}
+                </span>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
-                className="min-h-9 -mr-2"
                 onClick={() => setRestoredStep(null)}
-                aria-label="Dismiss draft restored notice"
+                className="min-h-11 px-4 rounded-full"
               >
                 Dismiss
               </Button>
             </div>
-          </Card>
+          </motion.div>
         )}
 
-        <Card className="p-6 lg:p-8">
-          {step === 0 && (
-            <div className="space-y-5">
-              <div>
-                <h1 className="text-xl font-semibold">Add your first project</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  A project groups units, bookings and payments together.
-                </p>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-code">
-                    Project code{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
-                  <Input
-                    id="p-code"
-                    placeholder="e.g. MA"
-                    value={project.project_code}
-                    onChange={(e) => setProjectField("project_code", e.target.value.toUpperCase())}
-                    maxLength={10}
-                    required
-                    aria-invalid={!!projectErrors.project_code}
-                    aria-describedby={projectErrors.project_code ? "p-code-err" : undefined}
-                    className="min-h-11 font-mono"
-                  />
-                  {projectErrors.project_code && (
-                    <p id="p-code-err" role="alert" className="text-xs text-destructive">
-                      {projectErrors.project_code}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-name">
-                    Project name{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
-                  <Input
-                    id="p-name"
-                    placeholder="e.g. Manal Arcade"
-                    value={project.project_name}
-                    onChange={(e) => setProjectField("project_name", e.target.value)}
-                    required
-                    aria-invalid={!!projectErrors.project_name}
-                    aria-describedby={projectErrors.project_name ? "p-name-err" : undefined}
-                    className="min-h-11"
-                  />
-                  {projectErrors.project_name && (
-                    <p id="p-name-err" role="alert" className="text-xs text-destructive">
-                      {projectErrors.project_name}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-location">
-                    Location{" "}
-                    <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-                  </Label>
-                  <Input
-                    id="p-location"
-                    placeholder="City / area"
-                    value={project.location}
-                    onChange={(e) => setProjectField("location", e.target.value)}
-                    className="min-h-11"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-units">
-                    Total units{" "}
-                    <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-                  </Label>
-                  <Input
-                    id="p-units"
-                    type="number"
-                    min={1}
-                    placeholder="e.g. 48"
-                    value={project.total_units}
-                    onChange={(e) => setProjectField("total_units", e.target.value)}
-                    aria-invalid={!!projectErrors.total_units}
-                    aria-describedby={projectErrors.total_units ? "p-units-err" : undefined}
-                    className="min-h-11"
-                  />
-                  {projectErrors.total_units && (
-                    <p id="p-units-err" role="alert" className="text-xs text-destructive">
-                      {projectErrors.total_units}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex justify-end pt-2">
-                <Button size="lg" className="min-h-11" onClick={saveProject} disabled={busy}>
-                  {busy ? "Saving…" : "Continue"}
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {step === 1 && (
-            <div className="space-y-5">
-              <div>
-                <h1 className="text-xl font-semibold">Add your first unit</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Under project <span className="font-mono">{project.project_code}</span> —{" "}
-                  {project.project_name}
-                </p>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="u-no">
-                    Unit ID{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
-                  <Input
-                    id="u-no"
-                    placeholder="e.g. 101"
-                    value={unit.unit_no}
-                    onChange={(e) => setUnitField("unit_no", e.target.value)}
-                    required
-                    aria-invalid={!!unitErrors.unit_no}
-                    aria-describedby={unitErrors.unit_no ? "u-no-err" : undefined}
-                    className="min-h-11 font-mono"
-                  />
-                  {unitErrors.unit_no && (
-                    <p id="u-no-err" role="alert" className="text-xs text-destructive">
-                      {unitErrors.unit_no}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="u-type">
-                    Type{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
-                  <Select
-                    value={unit.unit_type}
-                    onValueChange={(v) => setUnit((u) => ({ ...u, unit_type: v as UnitType }))}
-                  >
-                    <SelectTrigger id="u-type" className="min-h-11">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {UNIT_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="u-size">
-                    Size (sqft){" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
-                  <Input
-                    id="u-size"
-                    type="number"
-                    min={1}
-                    value={unit.size_sqft}
-                    onChange={(e) => setUnitField("size_sqft", e.target.value)}
-                    required
-                    aria-invalid={!!unitErrors.size_sqft}
-                    aria-describedby={unitErrors.size_sqft ? "u-size-err" : undefined}
-                    className="min-h-11"
-                  />
-                  {unitErrors.size_sqft && (
-                    <p id="u-size-err" role="alert" className="text-xs text-destructive">
-                      {unitErrors.size_sqft}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="u-rate">
-                    Base price / sqft (PKR){" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
-                  <Input
-                    id="u-rate"
-                    type="number"
-                    min={1}
-                    value={unit.base_rate}
-                    onChange={(e) => setUnitField("base_rate", e.target.value)}
-                    required
-                    aria-invalid={!!unitErrors.base_rate}
-                    aria-describedby={unitErrors.base_rate ? "u-rate-err" : undefined}
-                    className="min-h-11"
-                  />
-                  {unitErrors.base_rate && (
-                    <p id="u-rate-err" role="alert" className="text-xs text-destructive">
-                      {unitErrors.base_rate}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-2">
-                <Button variant="ghost" onClick={() => setStep(0)} disabled={busy}>
-                  Back
-                </Button>
-                <Button size="lg" className="min-h-11" onClick={saveUnit} disabled={busy}>
-                  {busy ? "Saving…" : "Continue"}
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-5">
-              <div>
-                <h1 className="text-xl font-semibold">Review your setup</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Confirm the details below before finishing. You can go back to edit anything.
-                </p>
-              </div>
-
-              <section
-                aria-labelledby="review-project"
-                className="rounded-xl border border-border overflow-hidden"
+        <div className="bg-card/60 border border-border/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[32px] overflow-hidden backdrop-blur-xl relative">
+          <AnimatePresence mode="wait">
+            {step === 0 && !pendingDraft && (
+              <motion.div
+                key="step-0"
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="p-8 sm:p-10 space-y-8"
               >
-                <header className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <h2 id="review-project" className="text-sm font-semibold">
-                    Project
-                  </h2>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Create your first project</h2>
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    A project acts as the master container for your units, bookings, and payments.
+                  </p>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="p-code"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Project Code *
+                    </Label>
+                    <Input
+                      id="p-code"
+                      placeholder="e.g. MA"
+                      value={project.project_code}
+                      onChange={(e) =>
+                        setProjectField("project_code", e.target.value.toUpperCase())
+                      }
+                      maxLength={10}
+                      required
+                      aria-invalid={!!projectErrors.project_code}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 font-mono text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                    {projectErrors.project_code && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {projectErrors.project_code}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="p-name"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Project Name *
+                    </Label>
+                    <Input
+                      id="p-name"
+                      placeholder="e.g. Manal Arcade"
+                      value={project.project_name}
+                      onChange={(e) => setProjectField("project_name", e.target.value)}
+                      required
+                      aria-invalid={!!projectErrors.project_name}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                    {projectErrors.project_name && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {projectErrors.project_name}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="p-location"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Location
+                    </Label>
+                    <Input
+                      id="p-location"
+                      placeholder="City / Area"
+                      value={project.location}
+                      onChange={(e) => setProjectField("location", e.target.value)}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="p-units"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Total Units
+                    </Label>
+                    <Input
+                      id="p-units"
+                      type="number"
+                      min={1}
+                      placeholder="e.g. 48"
+                      value={project.total_units}
+                      onChange={(e) => setProjectField("total_units", e.target.value)}
+                      aria-invalid={!!projectErrors.total_units}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                    {projectErrors.total_units && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {projectErrors.total_units}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-border/50">
                   <Button
-                    type="button"
-                    size="sm"
+                    onClick={saveProject}
+                    disabled={busy}
+                    className="rounded-full min-h-12 px-8 font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:-translate-y-0.5"
+                  >
+                    {busy ? "Saving..." : "Continue"} <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 1 && !pendingDraft && (
+              <motion.div
+                key="step-1"
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="p-8 sm:p-10 space-y-8"
+              >
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Configure a unit</h2>
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    Adding a unit for{" "}
+                    <span className="font-mono text-foreground font-medium bg-muted px-1.5 py-0.5 rounded">
+                      {project.project_code}
+                    </span>{" "}
+                    — {project.project_name}.
+                  </p>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="u-no"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Unit ID *
+                    </Label>
+                    <Input
+                      id="u-no"
+                      placeholder="e.g. 101"
+                      value={unit.unit_no}
+                      onChange={(e) => setUnitField("unit_no", e.target.value)}
+                      required
+                      aria-invalid={!!unitErrors.unit_no}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 font-mono text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                    {unitErrors.unit_no && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {unitErrors.unit_no}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="u-type"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Type *
+                    </Label>
+                    <Select
+                      value={unit.unit_type}
+                      onValueChange={(v) => setUnit((u) => ({ ...u, unit_type: v as UnitType }))}
+                    >
+                      <SelectTrigger
+                        id="u-type"
+                        className="min-h-12 rounded-xl bg-muted/50 border-border/60 focus:ring-primary/20"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        {UNIT_TYPES.map((t) => (
+                          <SelectItem key={t} value={t} className="rounded-lg">
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="u-size"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Size (sqft) *
+                    </Label>
+                    <Input
+                      id="u-size"
+                      type="number"
+                      min={1}
+                      value={unit.size_sqft}
+                      onChange={(e) => setUnitField("size_sqft", e.target.value)}
+                      required
+                      aria-invalid={!!unitErrors.size_sqft}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                    {unitErrors.size_sqft && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {unitErrors.size_sqft}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="u-rate"
+                      className="text-xs uppercase tracking-wider text-muted-foreground font-semibold"
+                    >
+                      Base price / sqft (PKR) *
+                    </Label>
+                    <Input
+                      id="u-rate"
+                      type="number"
+                      min={1}
+                      value={unit.base_rate}
+                      onChange={(e) => setUnitField("base_rate", e.target.value)}
+                      required
+                      aria-invalid={!!unitErrors.base_rate}
+                      className="min-h-12 rounded-xl bg-muted/50 border-border/60 text-base focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+                    />
+                    {unitErrors.base_rate && (
+                      <p className="text-[11px] text-destructive mt-1 font-medium">
+                        {unitErrors.base_rate}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-border/50">
+                  <Button
                     variant="ghost"
-                    className="min-h-9 -mr-2"
                     onClick={() => setStep(0)}
                     disabled={busy}
+                    className="rounded-full px-6"
                   >
-                    Edit
+                    Back
                   </Button>
-                </header>
-                <dl className="divide-y divide-border text-sm">
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Code</dt>
-                    <dd className="col-span-2 font-mono">{project.project_code || "—"}</dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Name</dt>
-                    <dd className="col-span-2">{project.project_name || "—"}</dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Location</dt>
-                    <dd className="col-span-2">
-                      {project.location.trim() || (
-                        <span className="text-muted-foreground">Not set</span>
-                      )}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Total units</dt>
-                    <dd className="col-span-2">
-                      {project.total_units.trim() || (
-                        <span className="text-muted-foreground">Not set</span>
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section
-                aria-labelledby="review-unit"
-                className="rounded-xl border border-border overflow-hidden"
-              >
-                <header className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <h2 id="review-unit" className="text-sm font-semibold">
-                    First unit
-                  </h2>
                   <Button
-                    type="button"
-                    size="sm"
+                    onClick={saveUnit}
+                    disabled={busy}
+                    className="rounded-full min-h-12 px-8 font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:-translate-y-0.5"
+                  >
+                    {busy ? "Saving..." : "Continue"} <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 2 && !pendingDraft && (
+              <motion.div
+                key="step-2"
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="p-8 sm:p-10 space-y-8"
+              >
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Review details</h2>
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    Everything looks good? You can go back to make changes if needed.
+                  </p>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Project Summary */}
+                  <div className="bg-muted/30 rounded-2xl p-5 border border-border/50 relative overflow-hidden group">
+                    <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setStep(0)}
+                        disabled={busy}
+                        className="min-h-11 px-4 rounded-full text-xs"
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+                      <Building2 className="w-3.5 h-3.5" /> Project
+                    </div>
+                    <div className="grid grid-cols-2 gap-y-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Code
+                        </span>
+                        <span className="font-mono font-medium">{project.project_code || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Name
+                        </span>
+                        <span className="font-medium">{project.project_name || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Location
+                        </span>
+                        <span>{project.location.trim() || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Units
+                        </span>
+                        <span>{project.total_units.trim() || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unit Summary */}
+                  <div className="bg-muted/30 rounded-2xl p-5 border border-border/50 relative overflow-hidden group">
+                    <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setStep(1)}
+                        disabled={busy}
+                        className="min-h-11 px-4 rounded-full text-xs"
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Unit Profile
+                    </div>
+                    <div className="grid grid-cols-2 gap-y-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Unit ID
+                        </span>
+                        <span className="font-mono font-medium">
+                          {project.project_code && unit.unit_no
+                            ? `${project.project_code.toUpperCase()}-${unit.unit_no.trim().toUpperCase()}`.replace(
+                                /\s+/g,
+                                "",
+                              )
+                            : "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Type
+                        </span>
+                        <span className="font-medium">{unit.unit_type}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Size
+                        </span>
+                        <span>
+                          {unit.size_sqft ? `${Number(unit.size_sqft).toLocaleString()} sqft` : "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block mb-1 text-[11px] uppercase tracking-wider">
+                          Base Rate
+                        </span>
+                        <span>
+                          {unit.base_rate
+                            ? `PKR ${Number(unit.base_rate).toLocaleString()} / sqft`
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-border/50 flex justify-between items-center">
+                      <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                        Standard Value
+                      </span>
+                      <span className="font-bold text-lg text-primary">
+                        {unit.size_sqft && unit.base_rate
+                          ? `PKR ${(Number(unit.size_sqft) * Number(unit.base_rate)).toLocaleString()}`
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-border/50">
+                  <Button
                     variant="ghost"
-                    className="min-h-9 -mr-2"
                     onClick={() => setStep(1)}
                     disabled={busy}
+                    className="rounded-full px-6"
                   >
-                    Edit
+                    Back
                   </Button>
-                </header>
-                <dl className="divide-y divide-border text-sm">
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Unit ID</dt>
-                    <dd className="col-span-2 font-mono">
-                      {project.project_code && unit.unit_no
-                        ? `${project.project_code.toUpperCase()}-${unit.unit_no.trim().toUpperCase()}`.replace(
-                            /\s+/g,
-                            "",
-                          )
-                        : "—"}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Type</dt>
-                    <dd className="col-span-2">{unit.unit_type}</dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Size</dt>
-                    <dd className="col-span-2">
-                      {unit.size_sqft ? `${Number(unit.size_sqft).toLocaleString()} sqft` : "—"}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Base price</dt>
-                    <dd className="col-span-2">
-                      {unit.base_rate
-                        ? `PKR ${Number(unit.base_rate).toLocaleString()} / sqft`
-                        : "—"}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 px-4 py-2.5">
-                    <dt className="text-muted-foreground">Standard value</dt>
-                    <dd className="col-span-2 font-medium">
-                      {unit.size_sqft && unit.base_rate
-                        ? `PKR ${(Number(unit.size_sqft) * Number(unit.base_rate)).toLocaleString()}`
-                        : "—"}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
+                  <Button
+                    onClick={() => setStep(3)}
+                    disabled={busy}
+                    className="rounded-full min-h-12 px-8 font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:-translate-y-0.5 bg-[var(--primary)]"
+                    style={{
+                      background:
+                        "linear-gradient(180deg, color-mix(in oklab, var(--primary) 90%, #fff 10%) 0%, var(--primary) 100%)", // allow-raw-color: needs white for mix
+                    }}
+                  >
+                    Looks perfect <Sparkles className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
 
-              <div className="flex items-center justify-between pt-2">
-                <Button variant="ghost" onClick={() => setStep(1)} disabled={busy}>
-                  Back
-                </Button>
-                <Button size="lg" className="min-h-11" onClick={() => setStep(3)} disabled={busy}>
-                  Looks good — continue
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            </div>
-          )}
+            {step === 3 && !pendingDraft && (
+              <motion.div
+                key="step-3"
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="p-8 sm:p-10 space-y-8 text-center"
+              >
+                <div className="mx-auto w-20 h-20 rounded-full bg-success/10 text-success flex items-center justify-center mb-6">
+                  <Sparkles className="w-10 h-10" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">You're ready to launch</h2>
+                  <p className="text-muted-foreground mt-3 text-[15px] leading-relaxed max-w-[90%] mx-auto">
+                    Your workspace is successfully set up. You can immediately log your first
+                    booking, or skip to explore the dashboard.
+                  </p>
+                </div>
 
-          {step === 3 && (
-            <div className="space-y-5">
-              <div>
-                <h1 className="text-xl font-semibold">Add your first booking</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  You can add your first booking now, or skip and do it later from the Bookings
-                  page.
-                </p>
-              </div>
-              <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
-                Bookings capture buyer details, dealer commission, adjustments and installment plan.
-                It's a detailed form — we'll drop you into it now.
-              </div>
-              <div role="note" className="rounded-xl border border-border bg-muted/40 p-4 text-sm">
-                <p className="font-medium text-foreground">What does “Skip” do?</p>
-                <ul className="mt-2 space-y-1.5 text-muted-foreground list-disc pl-5">
-                  <li>
-                    <span className="text-foreground font-medium">Marks setup complete</span> — the
-                    wizard won't reappear on future logins and you go straight to your Dashboard.
-                  </li>
-                  <li>
-                    You can add bookings anytime from the{" "}
-                    <span className="font-medium text-foreground">Bookings</span> page.
-                  </li>
-                  <li>
-                    <span className="text-foreground font-medium">Finish &amp; add booking</span>{" "}
-                    also marks setup complete, then takes you to the Bookings form so you can enter
-                    one now.
-                  </li>
-                </ul>
-              </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-                <Button variant="ghost" onClick={() => setStep(2)} disabled={busy}>
-                  Back
-                </Button>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="bg-muted/40 rounded-3xl p-6 border border-border/60 text-left">
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" /> First Booking
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    A booking captures buyer details, commission structures, adjustments, and an
+                    installment plan. If you choose to add one now, we'll take you straight to the
+                    Booking CRM.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setStep(2)}
+                    disabled={busy}
+                    className="absolute left-8 bottom-10 hidden sm:flex rounded-full px-6"
+                  >
+                    Back
+                  </Button>
+
                   <Button
                     variant="outline"
-                    className="min-h-11"
-                    onClick={() => finish("Setup complete — you can add a booking anytime")}
+                    className="w-full sm:w-auto rounded-full min-h-12 px-8 bg-background/50 backdrop-blur-md border-border/60"
+                    onClick={() => finish("Setup complete! Welcome to your Dashboard.")}
                     disabled={busy}
                   >
                     Skip for now
                   </Button>
                   <Button
-                    size="lg"
-                    className="min-h-11"
+                    className="w-full sm:w-auto rounded-full min-h-12 px-8 font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:-translate-y-0.5"
                     onClick={async () => {
-                      await finish("Setup complete — let's add your first booking");
+                      await finish("Setup complete! Let's add your first booking.");
                       navigate("/bookings");
                     }}
                     disabled={busy}
                   >
-                    Finish & add booking
+                    Add First Booking <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
-              </div>
-            </div>
-          )}
-        </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

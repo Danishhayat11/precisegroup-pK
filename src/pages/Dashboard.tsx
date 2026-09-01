@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* allow-raw-color-file: cash-integrity and diagnostic banners use amber/emerald/red palette pending status-token migration
  * Tracked debt: migrate to semantic status tokens (bg-success, bg-warning,
  * bg-destructive, bg-info) in follow-up. Guardrail (scripts/ci/no-hex-in-
@@ -659,7 +660,13 @@ export default function Dashboard() {
 
   return (
     <ErrorBoundary
-      fallbackRender={({ error, resetErrorBoundary }: { error: any, resetErrorBoundary: () => void }) => (
+      fallbackRender={({
+        error,
+        resetErrorBoundary,
+      }: {
+        error: any;
+        resetErrorBoundary: () => void;
+      }) => (
         <div className="p-8">
           <EmptyState
             icon={AlertTriangle}
@@ -2128,28 +2135,44 @@ function DashboardInner() {
     const transactionsRaw = data.transactions || [];
 
     let projectBookings = bookingsRaw;
-    if (dProjectFilter !== "all") projectBookings = projectBookings.filter((b: any) => b.project_code === dProjectFilter);
-    if (dUnitFilter !== "all") projectBookings = projectBookings.filter((b: any) => b.unit_id === dUnitFilter);
-    if (dClientFilter !== "all") projectBookings = projectBookings.filter((b: any) => b.client_name === dClientFilter);
+    if (dProjectFilter !== "all")
+      projectBookings = projectBookings.filter((b: any) => b.project_code === dProjectFilter);
+    if (dUnitFilter !== "all")
+      projectBookings = projectBookings.filter((b: any) => b.unit_id === dUnitFilter);
+    if (dClientFilter !== "all")
+      projectBookings = projectBookings.filter((b: any) => b.client_name === dClientFilter);
 
     const bookingIds = new Set(projectBookings.map((b: any) => b.booking_id));
-    const scopeByBooking = dProjectFilter !== "all" || dUnitFilter !== "all" || dClientFilter !== "all";
+    const scopeByBooking =
+      dProjectFilter !== "all" || dUnitFilter !== "all" || dClientFilter !== "all";
 
-    let bookings = !dFrom && !dTo ? projectBookings : projectBookings.filter((b: any) => inRange(b.booking_date));
+    let bookings =
+      !dFrom && !dTo
+        ? projectBookings
+        : projectBookings.filter((b: any) => inRange(b.booking_date));
 
-    let payments = !dFrom && !dTo ? paymentsRaw : paymentsRaw.filter((p: any) => inRange(p.payment_date));
+    let payments =
+      !dFrom && !dTo ? paymentsRaw : paymentsRaw.filter((p: any) => inRange(p.payment_date));
     if (scopeByBooking) payments = payments.filter((p: any) => bookingIds.has(p.booking_id));
 
     let ledger = !dFrom && !dTo ? ledgerRaw : ledgerRaw.filter((l: any) => inRange(l.due_date));
     if (scopeByBooking) ledger = ledger.filter((l: any) => bookingIds.has(l.booking_id));
 
     // Also filter adjustments by date range using adjustment_date
-    let adjustments = !dFrom && !dTo ? adjustmentsRaw : adjustmentsRaw.filter((a: any) => inRange(a.adjustment_date));
+    let adjustments =
+      !dFrom && !dTo
+        ? adjustmentsRaw
+        : adjustmentsRaw.filter((a: any) => inRange(a.adjustment_date));
     adjustments = adjustments.filter((a: any) => bookingIds.has(a.booking_id));
 
-    const units = dProjectFilter === "all" ? unitsRaw : unitsRaw.filter((u: any) => u.project_code === dProjectFilter);
+    const units =
+      dProjectFilter === "all"
+        ? unitsRaw
+        : unitsRaw.filter((u: any) => u.project_code === dProjectFilter);
 
-    const transactions = scopeByBooking ? transactionsRaw.filter((t: any) => bookingIds.has(t.booking_id)) : transactionsRaw;
+    const transactions = scopeByBooking
+      ? transactionsRaw.filter((t: any) => bookingIds.has(t.booking_id))
+      : transactionsRaw;
 
     return {
       bookings,
@@ -2184,16 +2207,13 @@ function DashboardInner() {
   const adjRealised = __totals.adjRealised;
   const totalCommission = __totals.commissionPaid;
   const totalReceived = __totals.totalReceived;
+  const adjApproved = __totals.adjApproved;
 
   // IMPORTANT: The KPI totalReceived and the drill-down total must use the same formula.
   // We double-check the components here to ensure the "drill" view doesn't drift.
-  const drillReceivedTotal = Math.round((cashRecovered + adjRealised) * 100) / 100;
+  const drillReceivedTotal = Math.round((cashRecovered - adjApproved) * 100) / 100;
 
   // Adjustment Allowed (approved by company) — REDUCES client balance.
-  const adjApproved = filtered.adjustments.reduce(
-    (s: number, a: any) => s + (Number(a.approved_value) || 0),
-    0,
-  );
   // Company Loss on adjustments = Allowed − Realised (asset booked at allowed value but only this much was recovered).
   const adjCompanyLoss = Math.max(adjApproved - adjRealised, 0);
   // Net Cash After Commission — what stayed with the company in cash.
@@ -2714,7 +2734,7 @@ function DashboardInner() {
         sections.push("FORMULA REFERENCE");
         sections.push(["Metric", "Formula"].map(csvCell).join(","));
         [
-          ["Total Received", "Cash Recovered + Adjustment Realised \u2212 Commission Paid"],
+          ["Total Received", "Cash Recovered \u2212 Adjustment Approved \u2212 Commission Paid"],
           ["Cash Recovered", "Sum of cash receipts (excludes adjustments)"],
           ["Total Adjustment Realised", "Sum of approved adjustments marked realised"],
           ["Commission Paid", "Sum of commission payouts in range"],
@@ -2780,13 +2800,13 @@ function DashboardInner() {
       const imgData = canvas.toDataURL("image/jpeg", 0.92);
       const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
       const formulaNote =
-        "Total Received = Cash + Adjustment Realised \u2212 Commission Paid  ·  Pending = max(Sell \u2212 (Cash + Approved Adj), 0)";
+        "Total Received = Cash \u2212 Adjustment Approved \u2212 Commission Paid  ·  Pending = max(Sell \u2212 (Cash + Approved Adj), 0)";
       pdf.setProperties({
         title: `Precise Realtors Dashboard — ${rangeLabel}`,
         subject: includeFormulaRef ? formulaNote : `Precise Realtors Dashboard — ${rangeLabel}`,
         author: "Precise Realtors & Builders",
         keywords: includeFormulaRef
-          ? "dashboard, KPI, Total Received = Cash + Adjustment Realised \u2212 Commission Paid"
+          ? "dashboard, KPI, Total Received = Cash \u2212 Adjustment Approved \u2212 Commission Paid"
           : "dashboard, KPI",
         creator: "Precise ERP",
       });

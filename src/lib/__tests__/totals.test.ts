@@ -7,7 +7,7 @@ import {
   sumCommissionPaid,
 } from "../totals";
 
-describe("computeTotalReceived — Cash + Adjustment Realised − Commission identity", () => {
+describe("computeTotalReceived — Cash − Adjustment Approved − Commission identity", () => {
   it("matches the formula on a simple mocked set", () => {
     const bookings = [
       { dealer_commission_amount: 50_000 },
@@ -26,8 +26,8 @@ describe("computeTotalReceived — Cash + Adjustment Realised − Commission ide
     expect(r.adjRealised).toBe(500_000);
     expect(r.adjApproved).toBe(650_000);
     expect(r.commissionPaid).toBe(75_000);
-    expect(r.totalReceived).toBe(1_250_000 + 500_000 - 75_000);
-    expect(r.totalReceived).toBe(r.cashRecovered + r.adjRealised - r.commissionPaid);
+    expect(r.totalReceived).toBe(1_250_000 - 650_000 - 75_000);
+    expect(r.totalReceived).toBe(r.cashRecovered - r.adjApproved - r.commissionPaid);
   });
 
   it("returns 0s for empty inputs", () => {
@@ -59,7 +59,7 @@ describe("computeTotalReceived — Cash + Adjustment Realised − Commission ide
     expect(r.adjRealised).toBe(150_000);
     expect(r.adjApproved).toBe(200_000);
     expect(r.commissionPaid).toBe(10_000);
-    expect(r.totalReceived).toBe(500_000 + 150_000 - 10_000);
+    expect(r.totalReceived).toBe(500_000 - 200_000 - 10_000);
   });
 
   it("can produce a negative Total Received when deductions exceed cash", () => {
@@ -68,8 +68,8 @@ describe("computeTotalReceived — Cash + Adjustment Realised − Commission ide
       payments: [{ safe_cash_amount: 100_000 }],
       adjustments: [{ approved_value: 200_000, realized_value: 50_000 }],
     });
-    expect(r.totalReceived).toBe(100_000 + 50_000 - 1_000_000);
-    expect(r.totalReceived).toBe(r.cashRecovered + r.adjRealised - r.commissionPaid);
+    expect(r.totalReceived).toBe(100_000 - 200_000 - 1_000_000);
+    expect(r.totalReceived).toBe(r.cashRecovered - r.adjApproved - r.commissionPaid);
   });
 
   it("identity holds across 200 randomised fuzz inputs", () => {
@@ -91,7 +91,7 @@ describe("computeTotalReceived — Cash + Adjustment Realised − Commission ide
       expect(r.adjRealised).toBe(sumAdjRealised(adjustments));
       expect(r.adjApproved).toBe(sumAdjApproved(adjustments));
       expect(r.commissionPaid).toBe(sumCommissionPaid(bookings));
-      expect(r.totalReceived).toBe(r.cashRecovered + r.adjRealised - r.commissionPaid);
+      expect(r.totalReceived).toBe(r.cashRecovered - r.adjApproved - r.commissionPaid);
     }
   });
 });

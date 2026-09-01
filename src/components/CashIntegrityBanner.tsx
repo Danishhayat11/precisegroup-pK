@@ -34,7 +34,9 @@ export function CashIntegrityBanner({ compact = false }: { compact?: boolean }) 
     return (
       <div className="flex items-center gap-2.5 rounded-2xl border border-success/30 bg-success/10 dark:bg-success/15 backdrop-blur-xl px-4 py-2.5 text-xs text-success shadow-xs">
         <ShieldCheck className="h-4 w-4 shrink-0" />
-        <span className="font-medium">Cash Received excludes Adjustment/Asset — verified across 0 integrity issues.</span>
+        <span className="font-medium">
+          Cash Received excludes Adjustment/Asset — verified across 0 integrity issues.
+        </span>
       </div>
     );
   }
@@ -49,7 +51,8 @@ export function CashIntegrityBanner({ compact = false }: { compact?: boolean }) 
       <ul className="mt-1.5 list-disc pl-5 space-y-0.5 font-medium">
         {issues.slice(0, 5).map((i, idx) => (
           <li key={idx}>
-            <span className="font-mono font-bold">{(i.row as any).receipt_no ?? "—"}</span> · {i.reason}
+            <span className="font-mono font-bold">{(i.row as any).receipt_no ?? "—"}</span> ·{" "}
+            {i.reason}
           </li>
         ))}
         {issues.length > 5 && <li>…and {issues.length - 5} more</li>}

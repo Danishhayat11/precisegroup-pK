@@ -32,7 +32,8 @@ const buttonVariants = cva(
           "border border-border/60 bg-white/5 dark:bg-black/20 backdrop-blur-xl text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:bg-white/40 dark:hover:bg-white/10 hover:border-foreground/30 hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 active:translate-y-0",
         secondary:
           "bg-secondary/70 backdrop-blur-xl text-secondary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] border border-white/30 dark:border-white/10 hover:bg-secondary/90 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 active:translate-y-0",
-        ghost: "text-foreground hover:bg-foreground/5 hover:text-foreground active:scale-[0.97] active:bg-foreground/10",
+        ghost:
+          "text-foreground hover:bg-foreground/5 hover:text-foreground active:scale-[0.97] active:bg-foreground/10",
         link: "text-primary underline-offset-4 hover:underline active:opacity-60",
       },
       size: {

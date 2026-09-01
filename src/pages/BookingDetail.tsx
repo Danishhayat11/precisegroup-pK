@@ -17,8 +17,21 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Printer, Calculator, Plus, ArrowRightLeft, Loader2, Trash2 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  ChevronLeft,
+  Printer,
+  Calculator,
+  Plus,
+  ArrowRightLeft,
+  Loader2,
+  Trash2,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import BookingDocumentEditor from "@/components/BookingDocumentEditor";
 import DocumentVault from "@/components/DocumentVault";
 import { PaymentHistoryButton } from "@/components/PaymentHistoryDialog";
@@ -321,7 +334,11 @@ export default function BookingDetail() {
                   <td className="px-4 py-2 text-right">
                     <AdminOnly>
                       <div className="flex items-center justify-end gap-2">
-                        <ReallocatePaymentDropdown payment={p} ledger={ledgerWithStatus} bookingId={b.booking_id} />
+                        <ReallocatePaymentDropdown
+                          payment={p}
+                          ledger={ledgerWithStatus}
+                          bookingId={b.booking_id}
+                        />
                         <EditPaymentDialog payment={p} bookingId={b.booking_id} />
                         <DeletePaymentDialog payment={p} bookingId={b.booking_id} />
                       </div>
@@ -354,7 +371,15 @@ function Row({ k, v }: { k: string; v: any }) {
   );
 }
 
-function ReallocatePaymentDropdown({ payment, ledger, bookingId }: { payment: any; ledger: any[]; bookingId: string }) {
+function ReallocatePaymentDropdown({
+  payment,
+  ledger,
+  bookingId,
+}: {
+  payment: any;
+  ledger: any[];
+  bookingId: string;
+}) {
   const qc = useQueryClient();
   const [moving, setMoving] = useState(false);
 
@@ -369,7 +394,7 @@ function ReallocatePaymentDropdown({ payment, ledger, bookingId }: { payment: an
       let headLabel = "Installment";
       if (/possession/i.test(targetRow.particulars ?? "")) headLabel = "Possession";
       if (/down/i.test(targetRow.particulars ?? "")) headLabel = "Downpayment";
-      
+
       const patch = {
         payment_date: payment.payment_date,
         payment_mode: payment.payment_mode,
@@ -415,14 +440,18 @@ function ReallocatePaymentDropdown({ payment, ledger, bookingId }: { payment: an
           disabled={moving}
           title="Reallocate Payment"
         >
-          {moving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />}
+          {moving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
+          )}
           Reallocate
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 max-h-64 overflow-y-auto">
         {targets.map((t: any) => (
           <DropdownMenuItem key={t.ledger_id} onClick={() => handleMove(t)}>
-            To: {t.particulars || "Unnamed Term"} 
+            To: {t.particulars || "Unnamed Term"}
             {t._remaining > 0 ? ` (Due: ${fmtPKR(t._remaining)})` : ""}
           </DropdownMenuItem>
         ))}
@@ -471,13 +500,18 @@ function DeletePaymentDialog({ payment, bookingId }: { payment: any; bookingId: 
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Payment</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to completely delete receipt {payment.receipt_no} for {fmtPKR(payment.amount)}? This action cannot be undone.
+            Are you sure you want to completely delete receipt {payment.receipt_no} for{" "}
+            {fmtPKR(payment.amount)}? This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
           <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-            {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            {deleting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Trash2 className="h-4 w-4 mr-2" />
+            )}
             Confirm Delete
           </Button>
         </AlertDialogFooter>

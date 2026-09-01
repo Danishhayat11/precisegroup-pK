@@ -110,8 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPlan((co?.plan ?? null) as Plan | null);
         // Treat the shared seed company as "already onboarded" — the wizard
         // only kicks in for freshly bootstrapped, single-tenant companies.
-        const completed =
-          cid === SEED_COMPANY_ID ? true : Boolean(co?.onboarding_completed_at);
+        const completed = cid === SEED_COMPANY_ID ? true : Boolean(co?.onboarding_completed_at);
         setOnboardingCompleted(completed);
         setApprovalStatus(
           (co?.approval_status ?? "approved") as "pending" | "approved" | "rejected",

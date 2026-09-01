@@ -272,7 +272,13 @@ export function CinematicVideoShowcase({
                 }
               }}
               className="pointer-events-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black flex items-center justify-center shadow-[0_0_40px_rgba(201,168,76,0.5)] transition-colors backdrop-blur-sm"
-              aria-label={activeScene.externalVideoUrl ? "Watch 3D Video" : (isPlaying ? "Pause walkthrough" : "Play walkthrough")}
+              aria-label={
+                activeScene.externalVideoUrl
+                  ? "Watch 3D Video"
+                  : isPlaying
+                    ? "Pause walkthrough"
+                    : "Play walkthrough"
+              }
             >
               {!activeScene.externalVideoUrl && isPlaying ? (
                 <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-black" />
@@ -300,7 +306,7 @@ export function CinematicVideoShowcase({
                 </button>
                 <iframe
                   src={`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(
-                    activeScene.externalVideoUrl
+                    activeScene.externalVideoUrl,
                   )}&show_text=false&width=auto`}
                   className="w-full h-full border-none shadow-2xl"
                   style={{ border: "none", overflow: "hidden" }}

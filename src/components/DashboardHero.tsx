@@ -81,9 +81,7 @@ export function DashboardHero({
             transition={{ duration: 0.4, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
             className="flex flex-wrap items-center gap-2.5 mb-3.5"
           >
-            <span
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
-            >
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
@@ -199,7 +197,9 @@ export function DashboardHero({
           <div className="space-y-2 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Currency</span>
-              <span className="font-semibold text-foreground font-mono bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-md">PKR (₨)</span>
+              <span className="font-semibold text-foreground font-mono bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-md">
+                PKR (₨)
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Audit Engine</span>
@@ -210,7 +210,9 @@ export function DashboardHero({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Print Engine</span>
-              <span className="font-semibold text-foreground font-mono bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-md">A4 Standard</span>
+              <span className="font-semibold text-foreground font-mono bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-md">
+                A4 Standard
+              </span>
             </div>
           </div>
         </motion.div>

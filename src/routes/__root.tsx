@@ -50,7 +50,6 @@ import sora700Woff2 from "@fontsource/sora/files/sora-latin-700-normal.woff2?url
 import inter400Woff2 from "@fontsource/inter/files/inter-latin-400-normal.woff2?url";
 import inter700Woff2 from "@fontsource/inter/files/inter-latin-700-normal.woff2?url";
 
-
 import { useAutoRetry } from "../lib/useAutoRetry";
 import { getOrCreateErrorId } from "../lib/error-id";
 import { ErrorRef } from "../components/ErrorRef";
@@ -121,7 +120,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-
 
   const auto = useAutoRetry({
     onRetry: () => {
@@ -318,7 +316,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           inLanguage: "en-PK",
         }),
       },
-
     ],
   }),
   shellComponent: RootShell,
@@ -334,10 +331,7 @@ function RootShell({ children }: { children: ReactNode }) {
   // stored/system theme before React hydrates; `suppressHydrationWarning`
   // permits that intentional DOM-vs-vdom divergence on <html>.
   return (
-    <html
-      lang="en-PK"
-      suppressHydrationWarning
-    >
+    <html lang="en-PK" suppressHydrationWarning>
       <head suppressHydrationWarning>
         {/* suppressHydrationWarning on <head> silences a dev-only
             mismatch: the Lovable dev-source injector tags the <head>

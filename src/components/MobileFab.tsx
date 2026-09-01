@@ -53,10 +53,12 @@ export function MobileFab() {
         height: 56,
         borderRadius: 9999,
         backgroundColor: "var(--primary)",
-        background: "linear-gradient(180deg, color-mix(in oklab, var(--primary) 90%, white 10%) 0%, var(--primary) 100%)",
+        background:
+          "linear-gradient(180deg, color-mix(in oklab, var(--primary) 90%, white 10%) 0%, var(--primary) 100%)",
         display: "grid",
         placeItems: "center",
-        boxShadow: "0 12px 28px -6px rgba(0, 122, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4)",
+        boxShadow:
+          "0 12px 28px -6px rgba(0, 122, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4)",
       }}
     >
       <Plus className="h-7 w-7 stroke-[2.5]" aria-hidden="true" />

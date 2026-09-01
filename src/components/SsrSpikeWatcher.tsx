@@ -48,7 +48,10 @@ export function SsrSpikeWatcher() {
       if (cancelled) return;
       if (error) {
         // If forbidden or not authorized, stop polling to avoid console noise
-        if ((error as any)?.reason === "forbidden" || (error as any)?.code === "RPC_NOT_AUTHORIZED") {
+        if (
+          (error as any)?.reason === "forbidden" ||
+          (error as any)?.code === "RPC_NOT_AUTHORIZED"
+        ) {
           cancelled = true;
         }
         return;

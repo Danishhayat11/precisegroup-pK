@@ -162,7 +162,7 @@ describe("LQIP fade-out — no LQIP provided", () => {
     // and fades in once loaded.
     expect(img.className).toMatch(/opacity-0/);
     expect(img.className).not.toMatch(/opacity-100/);
-    
+
     act(() => {
       fireEvent.load(img);
     });

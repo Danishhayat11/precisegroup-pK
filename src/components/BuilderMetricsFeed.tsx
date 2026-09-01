@@ -1,5 +1,13 @@
 import { motion } from "framer-motion";
-import { Building2, HardHat, Pickaxe, CheckCircle2, ShieldCheck, Cog, ArrowRight } from "lucide-react";
+import {
+  Building2,
+  HardHat,
+  Pickaxe,
+  CheckCircle2,
+  ShieldCheck,
+  Cog,
+  ArrowRight,
+} from "lucide-react";
 import { Link } from "@/lib/router-compat";
 
 export function BuilderMetricsFeed() {
@@ -67,7 +75,9 @@ export function BuilderMetricsFeed() {
         <div className="flex flex-col p-5 rounded-2xl bg-white/70 dark:bg-black/40 border border-white/40 dark:border-white/10 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2 text-muted-foreground mb-3">
             <HardHat className="h-4 w-4 text-emerald-600" />
-            <span className="text-[11px] font-bold uppercase tracking-wider">On-site Workforce</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              On-site Workforce
+            </span>
           </div>
           <div className="text-3xl font-display font-extrabold text-foreground tracking-tight mb-1">
             145

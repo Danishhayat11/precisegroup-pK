@@ -89,7 +89,7 @@ function renderSiteIndex() {
   return render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -121,7 +121,10 @@ describe("Team section — full-render <picture> audit", () => {
 
     const pictures = leadership.querySelectorAll("picture");
     // Mushtaq + Danish + Saeed all have photos now.
-    expect(pictures.length, "expected 3 <picture> elements for team cards with photos").toBeGreaterThanOrEqual(3);
+    expect(
+      pictures.length,
+      "expected 3 <picture> elements for team cards with photos",
+    ).toBeGreaterThanOrEqual(3);
 
     for (const picture of Array.from(pictures)) {
       const sources = picture.querySelectorAll("source");
@@ -151,7 +154,6 @@ describe("Team section — full-render <picture> audit", () => {
       expect(["async", "sync"]).toContain(img!.getAttribute("decoding"));
     }
   });
-
 
   it("every team card in the leadership section is reachable via an accessible name", async () => {
     const leadership = await mountAndAwaitLeadership();

@@ -341,7 +341,8 @@ export default function Login() {
             ← View Public Marketing Website
           </Link>
           <p className="text-[11px] text-muted-foreground/70">
-            © {new Date().getFullYear()} Precise Realtors &amp; Builders (Pvt.) Ltd. All rights reserved.
+            © {new Date().getFullYear()} Precise Realtors &amp; Builders (Pvt.) Ltd. All rights
+            reserved.
           </p>
         </div>
       </div>
