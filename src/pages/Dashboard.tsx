@@ -2214,7 +2214,7 @@ function DashboardInner() {
 
   // IMPORTANT: The KPI totalReceived and the drill-down total must use the same formula.
   // We double-check the components here to ensure the "drill" view doesn't drift.
-  const drillReceivedTotal = Math.round((cashRecovered - adjApproved) * 100) / 100;
+  const drillReceivedTotal = Math.round((cashRecovered + adjRealised - totalCommission) * 100) / 100;
 
   // Adjustment Allowed (approved by company) — REDUCES client balance.
   // Company Loss on adjustments = Allowed − Realised (asset booked at allowed value but only this much was recovered).

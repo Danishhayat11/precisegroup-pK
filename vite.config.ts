@@ -21,4 +21,7 @@ export default defineConfig({
     // router plugin itself, which is registered by the Lovable config.
     plugins: [mcpPlugin(), routeTreeErrorReporter()],
   },
+  nitro: {
+    preset: process.env.VERCEL ? "vercel" : "cloudflare-module",
+  },
 });

@@ -26,7 +26,6 @@ import { callRpc } from "@/integrations/supabase/approvedRpc";
 const PAYMENT_HEADS = ["Downpayment", "Installment", "Possession", "Other"];
 const PAYMENT_MODES = ["Cash", "Online", "Cheque", "PayOrder", "Adjustment/Asset"];
 
-
 export function EditPaymentDialog({ payment, bookingId }: { payment: any; bookingId: string }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
