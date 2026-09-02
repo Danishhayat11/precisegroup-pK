@@ -3346,6 +3346,9 @@ function DashboardInner() {
           ))}
         </div>
       ) : null}
+      <div className="bg-red-100 text-red-900 font-mono text-xs p-4 rounded mb-4">
+        DEBUG DATA: Cash={cashRecovered}, Realised={adjRealised}, Approved={adjApproved}, Comm={totalCommission}, Received={totalReceived}
+      </div>
       <Reveal
         amount={0.15}
         className={`grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-6 ${(filtered?.bookings ?? []).length === 0 ? "hidden" : ""}`}
