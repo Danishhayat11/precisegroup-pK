@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 import preciseColor from "./eslint-rules/no-raw-color.js";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi", ".vercel"] },
+  { ignores: ["dist", ".output", ".vinxi"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -45,7 +45,7 @@ export default tseslint.config(
     },
   },
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────
   // Protected surfaces: enforce `precise/no-raw-color`.
   //
   // Scope mirrors scripts/ci/no-hex-in-marketing-shell.mjs exactly so the
@@ -62,7 +62,7 @@ export default tseslint.config(
   //     - Error / not-found surfaces
   //     - Dashboard hero photography backdrop
   //     - Test files
-  // ─────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────
   {
     files: [
       "src/routes/site*.{ts,tsx}",
@@ -96,7 +96,7 @@ export default tseslint.config(
     },
   },
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────
   // Client-side `supabase.rpc(...)` ban.
   //
   // All client-side RPC calls MUST route through `callRpc` from
@@ -104,7 +104,7 @@ export default tseslint.config(
   // revoked-mapping layer, and audit logging apply. Server-function
   // handlers use `callServerRpc` and are covered by the separate CI
   // guard in `scripts/check-rpc-allowlist.mjs`.
-  // ─────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: [
@@ -128,7 +128,7 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.type='MemberExpression'][callee.property.name='rpc'][callee.object.name='supabase']",
           message:
-            "Do not call `supabase.rpc(...)` directly from client-side code. Import { callRpc } from '@/integrations/supabase/approvedRpc' and route the call through it so the approved-RPC allowlist, revoked-mapping layer, and audit logging apply.",
+            "Do not call `supabase.rpc(...)` directly from client-side code. Import { callRpc } from '@/integrations/supabase/approvedRpc' and route the call through it so the approved-RPC allowlist is enforced.",
         },
         {
           selector:
