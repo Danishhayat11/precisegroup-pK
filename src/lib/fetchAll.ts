@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
  * provide an explicit Row type parameter.
  */
 export async function fetchAll<Row>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   build: (qb: any) => any,
   opts: { table: string; pageSize?: number } & Record<string, unknown>,
 ): Promise<Row[]> {

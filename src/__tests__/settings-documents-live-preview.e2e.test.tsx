@@ -2075,7 +2075,7 @@ describe("Documents E2E — manifest.json schema validator", () => {
     const rootDir = join(tmpdir(), `docs-swap-leak-validator-${process.pid}-${Date.now()}`);
 
     const originalISOString = Date.prototype.toISOString;
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (Date.prototype as any).toISOString = function () {
       return "not-an-iso-timestamp";
     };
