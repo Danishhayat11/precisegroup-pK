@@ -3042,7 +3042,7 @@ function DashboardInner() {
                     if (ok) toast.success("Reset details copied to clipboard");
                     else toast.error("Couldn't copy to clipboard");
                   }}
-                  className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] font-medium text-warning hover:bg-warning/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-3 text-[11px] font-medium text-warning hover:bg-warning/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning"
                 >
                   Copy reset details
                 </button>
@@ -3054,7 +3054,7 @@ function DashboardInner() {
                     setResetLandingSr("");
                   }}
                   aria-label="Dismiss invalid link parameters notice"
-                  className="inline-flex min-h-11 min-w-11 lg:h-7 lg:w-7 lg:min-h-0 lg:min-w-0 items-center justify-center rounded-md text-warning hover:bg-warning/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-warning hover:bg-warning/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning"
                 >
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -3321,9 +3321,14 @@ function DashboardInner() {
       {filtered.bookings.length === 0 && settled ? (
         <div className="mb-6 rounded-3xl border border-dashed border-white/40 dark:border-white/10 bg-white/40 dark:bg-white/5 backdrop-blur-2xl p-8 md:p-12 text-center transition-all duration-300 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
           <div className="mx-auto mb-3 grid h-10 w-10 md:h-12 md:w-12 place-items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-sm">
-            <Building2 className="h-5 w-5 md:h-6 md:w-6 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <Building2
+              className="h-5 w-5 md:h-6 md:w-6 text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
           </div>
-          <div className="text-sm md:text-base font-bold text-foreground tracking-tight">No KPIs yet</div>
+          <div className="text-sm md:text-base font-bold text-foreground tracking-tight">
+            No KPIs yet
+          </div>
           <p className="mx-auto mt-2 max-w-[260px] md:max-w-md text-xs md:text-sm text-muted-foreground leading-relaxed">
             Add your first booking to see cash, adjustments, and overdue metrics here.
           </p>
