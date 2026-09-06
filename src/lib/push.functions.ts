@@ -18,8 +18,8 @@ const subscribeInput = z.object({
 
 /** Save (or upsert) the browser subscription for the signed-in user. */
 export const savePushSubscription = createServerFn({ method: "POST" })
-  .validator((data: unknown) => subscribeInput.parse(data))
   .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => subscribeInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 

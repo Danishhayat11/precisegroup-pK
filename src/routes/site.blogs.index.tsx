@@ -1,3 +1,4 @@
+/* allow-raw-color-file: marketing-design */
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { BLOG_POSTS } from '../lib/blogData';
 
