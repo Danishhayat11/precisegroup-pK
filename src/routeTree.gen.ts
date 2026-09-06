@@ -61,6 +61,7 @@ import { Route as AuthenticatedMyRequestsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedMaintenanceRouteImport } from './routes/_authenticated/maintenance'
 import { Route as AuthenticatedLogicRouteImport } from './routes/_authenticated/logic'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
+import { Route as AuthenticatedInspectionsRouteImport } from './routes/_authenticated/inspections'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
 import { Route as AuthenticatedDebuggerRouteImport } from './routes/_authenticated/debugger'
@@ -70,11 +71,13 @@ import { Route as AuthenticatedConstructionRouteImport } from './routes/_authent
 import { Route as AuthenticatedClientsRouteImport } from './routes/_authenticated/clients'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedAdjustmentsRouteImport } from './routes/_authenticated/adjustments'
+import { Route as SiteBlogsIndexRouteImport } from './routes/site.blogs.index'
 import { Route as AuthenticatedReportsIndexRouteImport } from './routes/_authenticated/reports.index'
 import { Route as AuthenticatedPrintLedgerIndexRouteImport } from './routes/_authenticated/print-ledger.index'
 import { Route as AuthenticatedDocumentsIndexRouteImport } from './routes/_authenticated/documents.index'
 import { Route as AuthenticatedBookingsIndexRouteImport } from './routes/_authenticated/bookings.index'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as SiteBlogsSlugRouteImport } from './routes/site.blogs.$slug'
 import { Route as ApiPublicPushSmokeRouteImport } from './routes/api/public/push-smoke'
 import { Route as ApiPublicPushLeadFollowupsDueRouteImport } from './routes/api/public/push-lead-followups-due'
 import { Route as ApiPublicPushInstallmentsDueRouteImport } from './routes/api/public/push-installments-due'
@@ -390,6 +393,12 @@ const AuthenticatedLedgerRoute = AuthenticatedLedgerRouteImport.update({
   path: '/ledger',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInspectionsRoute =
+  AuthenticatedInspectionsRouteImport.update({
+    id: '/inspections',
+    path: '/inspections',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedImportRoute = AuthenticatedImportRouteImport.update({
   id: '/import',
   path: '/import',
@@ -437,6 +446,11 @@ const AuthenticatedAdjustmentsRoute =
     path: '/adjustments',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const SiteBlogsIndexRoute = SiteBlogsIndexRouteImport.update({
+  id: '/blogs/',
+  path: '/blogs/',
+  getParentRoute: () => SiteRoute,
+} as any)
 const AuthenticatedReportsIndexRoute =
   AuthenticatedReportsIndexRouteImport.update({
     id: '/',
@@ -465,6 +479,11 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const SiteBlogsSlugRoute = SiteBlogsSlugRouteImport.update({
+  id: '/blogs/$slug',
+  path: '/blogs/$slug',
+  getParentRoute: () => SiteRoute,
 } as any)
 const ApiPublicPushSmokeRoute = ApiPublicPushSmokeRouteImport.update({
   id: '/api/public/push-smoke',
@@ -780,6 +799,7 @@ export interface FileRoutesByFullPath {
   '/debugger': typeof AuthenticatedDebuggerRoute
   '/health': typeof AuthenticatedHealthRoute
   '/import': typeof AuthenticatedImportRoute
+  '/inspections': typeof AuthenticatedInspectionsRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/logic': typeof AuthenticatedLogicRoute
   '/maintenance': typeof AuthenticatedMaintenanceRoute
@@ -856,11 +876,13 @@ export interface FileRoutesByFullPath {
   '/api/public/push-installments-due': typeof ApiPublicPushInstallmentsDueRoute
   '/api/public/push-lead-followups-due': typeof ApiPublicPushLeadFollowupsDueRoute
   '/api/public/push-smoke': typeof ApiPublicPushSmokeRoute
+  '/site/blogs/$slug': typeof SiteBlogsSlugRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/bookings/': typeof AuthenticatedBookingsIndexRoute
   '/documents/': typeof AuthenticatedDocumentsIndexRoute
   '/print-ledger/': typeof AuthenticatedPrintLedgerIndexRoute
   '/reports/': typeof AuthenticatedReportsIndexRoute
+  '/site/blogs/': typeof SiteBlogsIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRoute
 }
 export interface FileRoutesByTo {
@@ -891,6 +913,7 @@ export interface FileRoutesByTo {
   '/debugger': typeof AuthenticatedDebuggerRoute
   '/health': typeof AuthenticatedHealthRoute
   '/import': typeof AuthenticatedImportRoute
+  '/inspections': typeof AuthenticatedInspectionsRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/logic': typeof AuthenticatedLogicRoute
   '/maintenance': typeof AuthenticatedMaintenanceRoute
@@ -966,11 +989,13 @@ export interface FileRoutesByTo {
   '/api/public/push-installments-due': typeof ApiPublicPushInstallmentsDueRoute
   '/api/public/push-lead-followups-due': typeof ApiPublicPushLeadFollowupsDueRoute
   '/api/public/push-smoke': typeof ApiPublicPushSmokeRoute
+  '/site/blogs/$slug': typeof SiteBlogsSlugRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/bookings': typeof AuthenticatedBookingsIndexRoute
   '/documents': typeof AuthenticatedDocumentsIndexRoute
   '/print-ledger': typeof AuthenticatedPrintLedgerIndexRoute
   '/reports': typeof AuthenticatedReportsIndexRoute
+  '/site/blogs': typeof SiteBlogsIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRoute
 }
 export interface FileRoutesById {
@@ -1004,6 +1029,7 @@ export interface FileRoutesById {
   '/_authenticated/debugger': typeof AuthenticatedDebuggerRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
+  '/_authenticated/inspections': typeof AuthenticatedInspectionsRoute
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/logic': typeof AuthenticatedLogicRoute
   '/_authenticated/maintenance': typeof AuthenticatedMaintenanceRoute
@@ -1080,11 +1106,13 @@ export interface FileRoutesById {
   '/api/public/push-installments-due': typeof ApiPublicPushInstallmentsDueRoute
   '/api/public/push-lead-followups-due': typeof ApiPublicPushLeadFollowupsDueRoute
   '/api/public/push-smoke': typeof ApiPublicPushSmokeRoute
+  '/site/blogs/$slug': typeof SiteBlogsSlugRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/bookings/': typeof AuthenticatedBookingsIndexRoute
   '/_authenticated/documents/': typeof AuthenticatedDocumentsIndexRoute
   '/_authenticated/print-ledger/': typeof AuthenticatedPrintLedgerIndexRoute
   '/_authenticated/reports/': typeof AuthenticatedReportsIndexRoute
+  '/site/blogs/': typeof SiteBlogsIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRoute
 }
 export interface FileRouteTypes {
@@ -1118,6 +1146,7 @@ export interface FileRouteTypes {
     | '/debugger'
     | '/health'
     | '/import'
+    | '/inspections'
     | '/ledger'
     | '/logic'
     | '/maintenance'
@@ -1194,11 +1223,13 @@ export interface FileRouteTypes {
     | '/api/public/push-installments-due'
     | '/api/public/push-lead-followups-due'
     | '/api/public/push-smoke'
+    | '/site/blogs/$slug'
     | '/admin/'
     | '/bookings/'
     | '/documents/'
     | '/print-ledger/'
     | '/reports/'
+    | '/site/blogs/'
     | '/hr/employees/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1229,6 +1260,7 @@ export interface FileRouteTypes {
     | '/debugger'
     | '/health'
     | '/import'
+    | '/inspections'
     | '/ledger'
     | '/logic'
     | '/maintenance'
@@ -1304,11 +1336,13 @@ export interface FileRouteTypes {
     | '/api/public/push-installments-due'
     | '/api/public/push-lead-followups-due'
     | '/api/public/push-smoke'
+    | '/site/blogs/$slug'
     | '/admin'
     | '/bookings'
     | '/documents'
     | '/print-ledger'
     | '/reports'
+    | '/site/blogs'
     | '/hr/employees/$id'
   id:
     | '__root__'
@@ -1341,6 +1375,7 @@ export interface FileRouteTypes {
     | '/_authenticated/debugger'
     | '/_authenticated/health'
     | '/_authenticated/import'
+    | '/_authenticated/inspections'
     | '/_authenticated/ledger'
     | '/_authenticated/logic'
     | '/_authenticated/maintenance'
@@ -1417,11 +1452,13 @@ export interface FileRouteTypes {
     | '/api/public/push-installments-due'
     | '/api/public/push-lead-followups-due'
     | '/api/public/push-smoke'
+    | '/site/blogs/$slug'
     | '/_authenticated/admin/'
     | '/_authenticated/bookings/'
     | '/_authenticated/documents/'
     | '/_authenticated/print-ledger/'
     | '/_authenticated/reports/'
+    | '/site/blogs/'
     | '/_authenticated/hr/employees/$id'
   fileRoutesById: FileRoutesById
 }
@@ -1827,6 +1864,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/inspections': {
+      id: '/_authenticated/inspections'
+      path: '/inspections'
+      fullPath: '/inspections'
+      preLoaderRoute: typeof AuthenticatedInspectionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/import': {
       id: '/_authenticated/import'
       path: '/import'
@@ -1890,6 +1934,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdjustmentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/site/blogs/': {
+      id: '/site/blogs/'
+      path: '/blogs'
+      fullPath: '/site/blogs/'
+      preLoaderRoute: typeof SiteBlogsIndexRouteImport
+      parentRoute: typeof SiteRoute
+    }
     '/_authenticated/reports/': {
       id: '/_authenticated/reports/'
       path: '/'
@@ -1924,6 +1975,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/site/blogs/$slug': {
+      id: '/site/blogs/$slug'
+      path: '/blogs/$slug'
+      fullPath: '/site/blogs/$slug'
+      preLoaderRoute: typeof SiteBlogsSlugRouteImport
+      parentRoute: typeof SiteRoute
     }
     '/api/public/push-smoke': {
       id: '/api/public/push-smoke'
@@ -2320,6 +2378,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDebuggerRoute: typeof AuthenticatedDebuggerRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
+  AuthenticatedInspectionsRoute: typeof AuthenticatedInspectionsRoute
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
   AuthenticatedLogicRoute: typeof AuthenticatedLogicRoute
   AuthenticatedMaintenanceRoute: typeof AuthenticatedMaintenanceRoute
@@ -2384,6 +2443,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDebuggerRoute: AuthenticatedDebuggerRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
+  AuthenticatedInspectionsRoute: AuthenticatedInspectionsRoute,
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
   AuthenticatedLogicRoute: AuthenticatedLogicRoute,
   AuthenticatedMaintenanceRoute: AuthenticatedMaintenanceRoute,
@@ -2460,6 +2520,8 @@ interface SiteRouteChildren {
   SiteProjectsRoute: typeof SiteProjectsRoute
   SiteServicesRoute: typeof SiteServicesRoute
   SiteIndexRoute: typeof SiteIndexRoute
+  SiteBlogsSlugRoute: typeof SiteBlogsSlugRoute
+  SiteBlogsIndexRoute: typeof SiteBlogsIndexRoute
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
@@ -2469,6 +2531,8 @@ const SiteRouteChildren: SiteRouteChildren = {
   SiteProjectsRoute: SiteProjectsRoute,
   SiteServicesRoute: SiteServicesRoute,
   SiteIndexRoute: SiteIndexRoute,
+  SiteBlogsSlugRoute: SiteBlogsSlugRoute,
+  SiteBlogsIndexRoute: SiteBlogsIndexRoute,
 }
 
 const SiteRouteWithChildren = SiteRoute._addFileChildren(SiteRouteChildren)

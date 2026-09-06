@@ -28,7 +28,7 @@ const inviteSchema = z.object({
 
 export const adminInviteUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => inviteSchema.parse(d))
+  .validator((d: unknown) => inviteSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
 
@@ -82,7 +82,7 @@ const setRoleSchema = z.object({
 
 export const adminSetRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => setRoleSchema.parse(d))
+  .validator((d: unknown) => setRoleSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await callServerRpc(context.supabase, "admin_set_role", {
       _user: data.user_id,
@@ -100,7 +100,7 @@ const setActiveSchema = z.object({
 
 export const adminSetUserActive = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => setActiveSchema.parse(d))
+  .validator((d: unknown) => setActiveSchema.parse(d))
   .handler(async ({ data, context }) => {
     if (data.user_id === context.userId) {
       throw new Error("You cannot deactivate your own account.");
@@ -118,7 +118,7 @@ const transferSchema = z.object({ new_owner_id: z.string().uuid() });
 
 export const adminTransferOwnership = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => transferSchema.parse(d))
+  .validator((d: unknown) => transferSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await callServerRpc(context.supabase, "admin_transfer_ownership", {
       _new_owner: data.new_owner_id,

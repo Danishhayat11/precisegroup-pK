@@ -77,7 +77,7 @@ const listInput = z.object({
 
 export const listSuperAdminDenialAlerts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => listInput.parse(input ?? {}))
+  .validator((input: unknown) => listInput.parse(input ?? {}))
   .handler(async ({ data, context }): Promise<SuperAdminDenialAlertsResult> => {
     await assertSuperAdmin(context.supabase, context.userId, "list");
 
@@ -198,7 +198,7 @@ const resolveInput = z.object({
 
 export const resolveSuperAdminDenialAlert = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => resolveInput.parse(input))
+  .validator((input: unknown) => resolveInput.parse(input))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "resolve");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

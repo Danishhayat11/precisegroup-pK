@@ -18,7 +18,7 @@ import { callServerRpc } from "@/integrations/supabase/serverRpc";
 
 export const assertAdminDocumentAccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { scope?: string } | undefined) => ({
+  .validator((input: { scope?: string } | undefined) => ({
     scope: input?.scope ?? "documents",
   }))
   .handler(async ({ data, context }) => {

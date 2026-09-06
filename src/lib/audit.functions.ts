@@ -14,7 +14,7 @@ const auditSchema = z.object({
  * Used to record security-relevant events from the server runtime.
  */
 export const recordAuditLog = createServerFn({ method: "POST" })
-  .inputValidator(auditSchema)
+  .validator(auditSchema)
   .handler(async ({ data }: any) => {
     // Read environment variables or perform sensitive logic inside .handler()
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

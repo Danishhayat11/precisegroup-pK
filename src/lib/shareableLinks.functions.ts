@@ -19,7 +19,7 @@ const shareIdSchema = z.object({
  */
 export const createShareableLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => createShareSchema.parse(input))
+  .validator((input: unknown) => createShareSchema.parse(input))
   .handler(async ({ data, context }) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + data.expiresInDays);
@@ -67,7 +67,7 @@ export const listActiveShares = createServerFn({ method: "GET" })
  */
 export const revokeShareableLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => shareIdSchema.parse(input))
+  .validator((input: unknown) => shareIdSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
       .from("security_report_shares")
@@ -85,7 +85,7 @@ export const revokeShareableLink = createServerFn({ method: "POST" })
  */
 export const getAccessLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => shareIdSchema.parse(input))
+  .validator((input: unknown) => shareIdSchema.parse(input))
   .handler(async ({ data, context }) => {
     // First verify ownership of the share
     const { data: share, error: shareError } = await context.supabase

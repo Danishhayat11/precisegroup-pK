@@ -60,7 +60,7 @@ async function logDenial(userId: string): Promise<void> {
 
 export const getRpcDenialMetricsForAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { windowDays?: number } | undefined) => {
+  .validator((input: { windowDays?: number } | undefined) => {
     const raw = input?.windowDays ?? 7;
     const n = Math.floor(Number(raw));
     const windowDays = Number.isFinite(n) ? Math.max(1, Math.min(90, n)) : 7;

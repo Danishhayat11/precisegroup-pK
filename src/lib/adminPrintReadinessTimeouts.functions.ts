@@ -109,7 +109,7 @@ export const getPrintReadinessTimeouts = createServerFn({ method: "GET" })
 
 export const updatePrintReadinessTimeouts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => validateInput(input))
+  .validator((input: unknown) => validateInput(input))
   .handler(async ({ data, context }): Promise<GetPrintReadinessTimeoutsResult> => {
     await assertSuperAdmin(context.supabase, context.userId);
 

@@ -1,4 +1,3 @@
-
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { generateText, Output, NoObjectGeneratedError } from "ai";
@@ -359,7 +358,7 @@ const approveSchema = z.object({ company_id: z.string().uuid() });
 
 export const superAdminApproveCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => approveSchema.parse(d))
+  .validator((d: unknown) => approveSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminApproveCompany");
     const { error } = await context.supabase
@@ -388,7 +387,7 @@ const rejectSchema = z.object({
 
 export const superAdminRejectCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => rejectSchema.parse(d))
+  .validator((d: unknown) => rejectSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminRejectCompany");
     const { error } = await context.supabase
@@ -418,7 +417,7 @@ const setActiveSchema = z.object({
 
 export const superAdminSetCompanyActive = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => setActiveSchema.parse(d))
+  .validator((d: unknown) => setActiveSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminSetCompanyActive");
     const { error } = await context.supabase
@@ -441,7 +440,7 @@ const planSchema = z.object({
 
 export const superAdminChangePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => planSchema.parse(d))
+  .validator((d: unknown) => planSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminChangePlan");
     const { error } = await context.supabase
@@ -462,7 +461,7 @@ const grantSaSchema = z.object({ email: z.string().email() });
 
 export const superAdminGrantSuperAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => grantSaSchema.parse(d))
+  .validator((d: unknown) => grantSaSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminGrantSuperAdmin");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -494,7 +493,7 @@ const revokeSaSchema = z.object({ user_id: z.string().uuid() });
 
 export const superAdminRevokeSuperAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => revokeSaSchema.parse(d))
+  .validator((d: unknown) => revokeSaSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminRevokeSuperAdmin");
     if (data.user_id === context.userId) {
@@ -529,7 +528,7 @@ const impersonateSchema = z.object({
  */
 export const superAdminImpersonateCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => impersonateSchema.parse(d))
+  .validator((d: unknown) => impersonateSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminImpersonateCompany");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -699,7 +698,7 @@ const reviewSchema = z.object({ company_id: z.string().uuid() });
 
 export const superAdminAiReviewCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => reviewSchema.parse(d))
+  .validator((d: unknown) => reviewSchema.parse(d))
   .handler(async ({ data, context }): Promise<AiCompanyReview> => {
     await assertSuperAdmin(context.supabase, context.userId, "superAdminAiReviewCompany");
 

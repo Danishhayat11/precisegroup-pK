@@ -83,7 +83,7 @@ If the code is clean, return an empty diagnostics array and echo the input as fi
 
 export const analyzeCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => AnalyzeInput.parse(input))
+  .validator((input: unknown) => AnalyzeInput.parse(input))
   .handler(async ({ data }): Promise<AnalysisReport> => {
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured on this workspace.");

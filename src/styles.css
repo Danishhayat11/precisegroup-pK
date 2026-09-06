@@ -21,11 +21,15 @@
     mix-blend-mode: overlay;
   }
   /* Refined typography */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     letter-spacing: -0.025em; /* Tighter tracking for premium feel */
   }
 }
-
 
 /*
  * Metric-adjusted fallback fonts (anti-CLS).
@@ -425,6 +429,48 @@
   --glass-bg: hsl(38 45% 96% / 0.72);
   --glass-border: hsl(24 10% 10% / 0.08);
   --glass-shadow: 0 1px 0 hsl(38 45% 100% / 0.9) inset, 0 8px 24px -12px hsl(24 10% 10% / 0.14);
+}
+
+.dark[data-theme="editorial"],
+.dark [data-theme="editorial"] {
+  --background: hsl(222 25% 4%);
+  --foreground: hsl(0 0% 100%);
+
+  --card: hsl(222 20% 8%);
+  --card-foreground: hsl(0 0% 100%);
+
+  --popover: hsl(222 20% 9%);
+  --popover-foreground: hsl(0 0% 100%);
+
+  --primary: hsl(42 85% 65%);
+  --primary-foreground: hsl(222 25% 4%);
+
+  --secondary: hsl(222 15% 12%);
+  --secondary-foreground: hsl(210 20% 98%);
+
+  --muted: hsl(222 15% 10%);
+  --muted-foreground: hsl(215 15% 90%);
+
+  --input-placeholder: hsl(215 15% 70%);
+  --input-disabled-bg: hsl(222 15% 12%);
+  --input-disabled-fg: hsl(215 15% 50%);
+  --control-disabled-fg: hsl(215 15% 50%);
+
+  --accent: hsl(42 85% 65% / 0.12);
+  --accent-foreground: hsl(42 85% 65%);
+  --gold: hsl(42 85% 65%);
+
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-text: hsl(0 85% 65%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --border: hsl(215 20% 30% / 0.2);
+  --input: hsl(215 20% 30% / 0.3);
+  --ring: hsl(42 85% 65%);
+
+  --glass-bg: hsl(222 25% 4% / 0.72);
+  --glass-border: hsl(215 20% 80% / 0.1);
+  --glass-shadow: 0 1px 0 hsl(215 20% 80% / 0.1) inset, 0 8px 24px -12px hsl(0 0% 0% / 0.6);
 }
 
 .dark {

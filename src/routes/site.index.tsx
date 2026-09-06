@@ -394,11 +394,11 @@ function HomePage() {
              a warm left-side gradient that lifts the display headline
              off the architectural photography. */}
           {/* allow-raw-color: hero scrim overlays warm porcelain over dark architectural photography; theme-agnostic by design */}
-          <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-white/40 to-[rgba(250,248,244,1)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/40 to-background" />
           {/* allow-raw-color: hero scrim overlays warm porcelain over dark architectural photography; theme-agnostic by design */}
-          <div className="absolute inset-0 bg-gradient-to-r from-white/80 via-white/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/40 to-transparent" />
           {/* allow-raw-color: subtle bronze light-rake on the right edge to warm the hero */}
-          <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_top_right,_rgba(199,148,72,0.22),_transparent_65%)]" />
+          <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_top_right,_var(--accent),_transparent_65%)]" />
         </div>
 
         <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-7xl flex-col justify-center px-6 pt-40 pb-24 sm:px-10 sm:pt-44">
@@ -411,7 +411,7 @@ function HomePage() {
             <span className="lg-pill site-kicker mb-8 text-foreground">
               <span
                 aria-hidden
-                className="h-1.5 w-1.5 rounded-full bg-[var(--gold)] shadow-[0_0_10px_rgba(201,169,97,0.9)]"
+                className="h-1.5 w-1.5 rounded-full bg-[var(--gold)] shadow-[0_0_10px_var(--gold)]"
               />
               Established Excellence · Islamabad
             </span>
@@ -881,7 +881,7 @@ function HomePage() {
             <div className="mt-8 flex flex-wrap gap-4">
               <Link
                 to="/signup"
-                className="lg-btn-primary lg-shine text-[11px] uppercase tracking-[0.22em] bg-[var(--gold)] text-black hover:bg-white hover:text-black border-none"
+                className="lg-btn-primary lg-shine text-[11px] uppercase tracking-[0.22em]"
               >
                 Register Your Company
                 <ArrowUpRight className="h-4 w-4" />

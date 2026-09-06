@@ -18,8 +18,8 @@ const subscribeInput = z.object({
 
 /** Save (or upsert) the browser subscription for the signed-in user. */
 export const savePushSubscription = createServerFn({ method: "POST" })
+  .validator((data: unknown) => subscribeInput.parse(data))
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => subscribeInput.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
@@ -100,7 +100,7 @@ function safeHost(endpoint: string): string {
 /** Remove a subscription by endpoint (called on unsubscribe or when the browser rotates it). */
 export const deletePushSubscription = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ endpoint: z.string().url() }).parse(data))
+  .validator((data: unknown) => z.object({ endpoint: z.string().url() }).parse(data))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
       .from("push_subscriptions")

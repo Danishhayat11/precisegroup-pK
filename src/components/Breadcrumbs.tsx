@@ -42,6 +42,7 @@ const LABELS: Record<string, string> = {
   payments: "Payments",
   ledger: "Installment Ledger",
   adjustments: "Adjustments",
+  inspections: "Inspections",
   documents: "Documents",
   reports: "Reports",
   health: "Data Health",

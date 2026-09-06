@@ -76,7 +76,7 @@ async function logDenial(userId: string): Promise<void> {
 
 export const getSuperAdminAuthAuditLog = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => inputSchema.parse(input ?? {}))
+  .validator((input: unknown) => inputSchema.parse(input ?? {}))
   .handler(async ({ data, context }): Promise<SuperAdminAuthAuditResult> => {
     await assertSuperAdmin(context.supabase, context.userId);
 

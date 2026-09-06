@@ -17,7 +17,7 @@ export type TenantCleanupReport = {
 
 export const cleanupTestTenant = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { companyId?: string; confirm: string }) => {
+  .validator((input: { companyId?: string; confirm: string }) => {
     if (input.confirm !== "DELETE") {
       throw new Error('Confirmation text must be exactly "DELETE".');
     }

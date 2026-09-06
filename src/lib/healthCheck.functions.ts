@@ -32,7 +32,7 @@ export const runHealthCheck = createServerFn({ method: "GET" })
     // to allow public health status reads while gating privileged refreshes.
     requireSupabaseAuth,
   ])
-  .inputValidator((data) => z.object({ refresh: z.boolean().optional() }).parse(data))
+  .validator((data) => z.object({ refresh: z.boolean().optional() }).parse(data))
   .handler(async ({ data, context }) => {
     // If refreshing, we ensure the user is authenticated.
     // The middleware requirement above already enforces a valid session for all calls to this fn.

@@ -22,7 +22,7 @@ export type TenantScopeLogsQuery = {
 
 export const listTenantScopeLogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: TenantScopeLogsQuery) => input ?? {})
+  .validator((input: TenantScopeLogsQuery) => input ?? {})
   .handler(async ({ data, context }): Promise<TenantScopeLogRow[]> => {
     const { supabase, userId } = context;
 

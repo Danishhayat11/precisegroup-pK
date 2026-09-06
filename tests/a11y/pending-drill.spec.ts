@@ -105,12 +105,10 @@ test("Pending Balance drill opens and rows match Received/Pending zeroing rules"
   // "No records" row — that's still a valid zeroing assertion but there's
   // nothing to invariant-check per row. We exit early in that case.
   if (rowCount === 0) {
-    test
-      .info()
-      .annotations.push({
-        type: "info",
-        description: "Pending drill is empty — everything is covered.",
-      });
+    test.info().annotations.push({
+      type: "info",
+      description: "Pending drill is empty — everything is covered.",
+    });
     return;
   }
 

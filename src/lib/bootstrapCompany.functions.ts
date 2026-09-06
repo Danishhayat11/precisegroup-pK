@@ -32,7 +32,7 @@ const bootstrapSchema = z.object({
 
 export const bootstrapCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => bootstrapSchema.parse(d))
+  .validator((d: unknown) => bootstrapSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { data: newCompanyId, error } = await callServerRpc(
       context.supabase,

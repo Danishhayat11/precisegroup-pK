@@ -154,7 +154,6 @@ export default function Signup() {
 
       toast.success("Application submitted — a Super Admin will approve your workspace shortly.");
       navigate("/pending-approval");
-
     } catch (err: any) {
       toastError(err, "Could not create your account", { retry: () => void submit() });
     } finally {

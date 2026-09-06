@@ -14,7 +14,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useStableReducedMotion } from "@/components/site/useStableReducedMotion";
 
 const NAV: ReadonlyArray<{
-  to: "/site" | "/site/services" | "/site/projects" | "/site/pricing" | "/site/contact";
+  to: "/site" | "/site/services" | "/site/projects" | "/site/pricing" | "/site/blogs" | "/site/contact";
   label: string;
   exact?: boolean;
 }> = [
@@ -22,6 +22,7 @@ const NAV: ReadonlyArray<{
   { to: "/site/services", label: "Services" },
   { to: "/site/projects", label: "Portfolio" },
   { to: "/site/pricing", label: "Pricing" },
+  { to: "/site/blogs", label: "Blogs" },
   { to: "/site/contact", label: "Contact" },
 ];
 

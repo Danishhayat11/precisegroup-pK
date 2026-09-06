@@ -261,7 +261,7 @@ export type ShareIsolationReportResult = {
 
 export const shareIsolationReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { report: IsolationReport }) => {
+  .validator((data: { report: IsolationReport }) => {
     if (!data || typeof data !== "object" || !data.report) {
       throw new Error("report is required");
     }

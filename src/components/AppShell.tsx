@@ -34,6 +34,7 @@ import {
   Banknote,
   DoorOpen,
   KanbanSquare,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
@@ -148,6 +149,12 @@ const navGroups: NavGroup[] = [
         label: "Construction",
         icon: HardHat,
         desc: "Per-project construction budgets, costs and payments",
+      },
+      {
+        to: "/inspections",
+        label: "Inspections",
+        icon: ClipboardCheck,
+        desc: "Site inspections and quality control",
       },
       {
         to: "/crm",

@@ -2496,7 +2496,7 @@ function DashboardInner() {
     },
     {
       key: "received",
-      label: "Total Received (Fixed)",
+      label: "Total Received",
       val: fmtPKR(totalReceived),
       sub: `Cash + Realised - Comm · ${recoveryPct}% of sell value`,
       icon: CheckCircle2,

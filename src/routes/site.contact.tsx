@@ -122,7 +122,7 @@ function ContactPage() {
             initial={reduce ? {} : { opacity: 0, y: 12 }}
             animate={reduce ? {} : { opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="relative overflow-hidden rounded-2xl border border-foreground/10 bg-card p-6 shadow-[0_2px_20px_-6px_rgba(18,20,26,0.08)] sm:p-10"
+            className="relative overflow-hidden rounded-2xl border border-foreground/10 bg-card p-6 shadow-lg sm:p-10"
           >
             <div
               aria-hidden

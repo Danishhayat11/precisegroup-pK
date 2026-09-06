@@ -24,36 +24,7 @@ export const Route = createFileRoute("/site")({
   pendingMinMs: 400,
 });
 
-/**
- * Force the marketing surface to render in the light palette regardless of
- * the app's saved theme.
- *
- * The `/site` pages are an intentionally light-only editorial aesthetic
- * (Playfair display + charcoal ink on off-white, hero panels with hardcoded
- * arbitrary bg utilities, etc.). Tailwind v4 bakes theme colors into utility CSS at
- * build time via `@theme inline`, so overriding CSS custom properties on an
- * inner `.site-luxury` container does NOT change the compiled dark variants.
- * The only reliable way to keep contrast correct is to strip `.dark` from
- * `<html>` while the site tree is mounted, then restore it on unmount so the
- * app returns to whatever theme the user selected.
- */
-function useForceLightThemeOnSite() {
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const root = document.documentElement;
-    const wasDark = root.classList.contains("dark");
-    const prevColorScheme = root.style.colorScheme;
-    root.classList.remove("dark");
-    root.style.colorScheme = "light";
-    return () => {
-      if (wasDark) root.classList.add("dark");
-      root.style.colorScheme = prevColorScheme;
-    };
-  }, []);
-}
-
 function SiteLayout() {
-  useForceLightThemeOnSite();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const showFab = pathname !== "/site/contact";
   return (

@@ -8,8 +8,8 @@ const deactivateSchema = z.object({
 });
 
 export const adminDeactivateCompany = createServerFn({ method: "POST" })
+  .validator((d: unknown) => deactivateSchema.parse(d))
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => deactivateSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await callServerRpc(context.supabase, "admin_deactivate_company", {
       _reason: data.reason,

@@ -215,7 +215,6 @@ export default function Onboarding() {
     setProjectErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
   };
   const setUnitField = <K extends UnitField>(k: K, v: string) => {
-
     setUnit((u) => ({ ...u, [k]: v as any }));
     setUnitErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
   };
@@ -282,7 +281,6 @@ export default function Onboarding() {
           notes: project.total_units ? `Planned total units: ${project.total_units}` : null,
         },
         companyId!,
-
       ) as any,
     );
     setBusy(false);
@@ -347,7 +345,6 @@ export default function Onboarding() {
           status: "Available",
         },
         companyId!,
-
       ) as any,
     );
     setBusy(false);

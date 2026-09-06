@@ -437,7 +437,7 @@ export type RunIsolationCheckInput = {
 
 export const runIsolationCheck = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: RunIsolationCheckInput | undefined): RunIsolationCheckInput => {
+  .validator((data: RunIsolationCheckInput | undefined): RunIsolationCheckInput => {
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const t1 = data?.tenant1_id ?? null;
     const t2 = data?.tenant2_id ?? null;

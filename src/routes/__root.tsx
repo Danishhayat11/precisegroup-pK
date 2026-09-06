@@ -14,6 +14,7 @@ import { PageTransition } from "@/components/motion/PageTransition";
 import { RouteProgress } from "@/components/motion/RouteProgress";
 import { ThemeAnnouncer } from "@/components/ThemeAnnouncer";
 import { easeSignature } from "@/lib/motion";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 import appCss from "../styles.css?url";
 import "@fontsource/sora/500.css";
@@ -441,6 +442,7 @@ function RootComponent() {
               <InstallPrompt />
               <Toaster />
               <Sonner />
+              <SpeedInsights />
             </AuthProvider>
           </TooltipProvider>
         </MotionConfig>
