@@ -22,10 +22,10 @@ function BlogsIndexPage() {
 
       <div className="max-w-7xl mx-auto relative z-10">
         <div className="mb-16">
-          <h1 className="text-4xl md:text-6xl font-semibold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-white/60 mb-6">
+          <h1 className="text-4xl md:text-6xl font-semibold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-muted-foreground mb-6">
             Insights & News
           </h1>
-          <p className="text-xl text-white/50 max-w-2xl leading-relaxed">
+          <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
             Discover expert perspectives on real estate investment, modern construction, and property technology.
           </p>
         </div>
@@ -36,7 +36,7 @@ function BlogsIndexPage() {
               key={post.slug}
               to="/site/blogs/$slug"
               params={{ slug: post.slug }}
-              className="group block rounded-3xl overflow-hidden bg-white/[0.02] border border-white/10 hover:bg-white/[0.04] transition-all duration-300 ease-spring active:scale-[0.98]"
+              className="group block rounded-3xl overflow-hidden bg-card border hover:bg-muted/50 transition-all duration-300 ease-spring active:scale-[0.98]"
             >
               <div className="aspect-[16/9] w-full overflow-hidden relative">
                 <img
@@ -52,17 +52,17 @@ function BlogsIndexPage() {
                   <span className="text-xs font-medium text-[var(--gold)] tracking-wider uppercase">
                     {post.date}
                   </span>
-                  <span className="w-1 h-1 rounded-full bg-white/20" />
-                  <span className="text-xs text-white/40">
+                  <span className="w-1 h-1 rounded-full bg-border" />
+                  <span className="text-xs text-muted-foreground">
                     {post.author}
                   </span>
                 </div>
                 
-                <h2 className="text-xl md:text-2xl font-medium text-white mb-4 line-clamp-2 group-hover:text-[var(--gold)] transition-colors">
+                <h2 className="text-xl md:text-2xl font-medium text-foreground mb-4 line-clamp-2 group-hover:text-[var(--gold)] transition-colors">
                   {post.title}
                 </h2>
                 
-                <p className="text-white/50 text-sm leading-relaxed line-clamp-3">
+                <p className="text-muted-foreground text-sm leading-relaxed line-clamp-3">
                   {post.summary}
                 </p>
               </div>
