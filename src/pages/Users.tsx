@@ -74,7 +74,7 @@ const DISPLAY_ROLES: { value: Role; label: string; description: string }[] = [
 ];
 
 export default function Users() {
-  const { isAdmin, isOwner, user: me } = useAuth();
+  const { isAdmin, isOwner, isSuperAdmin, user: me } = useAuth();
   const qc = useQueryClient();
 
   const listFn = useServerFn(adminListUsers);
@@ -317,7 +317,7 @@ export default function Users() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {DISPLAY_ROLES.map((r) => (
+                              {(isSuperAdmin ? DISPLAY_ROLES : DISPLAY_ROLES.filter(r => r.value !== "admin")).map((r) => (
                                 <SelectItem key={r.value} value={r.value}>
                                   {r.label}
                                 </SelectItem>
@@ -450,7 +450,7 @@ export default function Users() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {DISPLAY_ROLES.map((r) => (
+                      {(isSuperAdmin ? DISPLAY_ROLES : DISPLAY_ROLES.filter(r => r.value !== "admin")).map((r) => (
                         <SelectItem key={r.value} value={r.value}>
                           <div>
                             <div className="font-medium">{r.label}</div>

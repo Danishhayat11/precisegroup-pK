@@ -23,7 +23,7 @@ async function assertAdmin(supabase: any, userId: string) {
 const inviteSchema = z.object({
   email: z.string().email(),
   full_name: z.string().trim().min(1).max(120).optional(),
-  role: z.enum(["manager", "staff", "viewer"]).default("staff"),
+  role: z.enum(["admin", "manager", "staff", "viewer"]).default("staff"),
 });
 
 export const adminInviteUser = createServerFn({ method: "POST" })
@@ -31,6 +31,12 @@ export const adminInviteUser = createServerFn({ method: "POST" })
   .validator((d: unknown) => inviteSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+
+    // Only super_admin callers can invite as admin role
+    if (data.role === "admin") {
+      const { data: isSA } = await callServerRpc(context.supabase, "is_super_admin", { _user_id: context.userId });
+      if (!isSA) throw new Error("Only Super Admins can invite users as Admin.");
+    }
 
     // Always create a company_invitations row so admins can copy a shareable
     // link even when email delivery is unavailable. `handle_new_user` reads
@@ -77,13 +83,18 @@ export const adminInviteUser = createServerFn({ method: "POST" })
 
 const setRoleSchema = z.object({
   user_id: z.string().uuid(),
-  role: z.enum(["manager", "staff", "viewer"]), // Block escalating to admin through this normal flow
+  role: z.enum(["admin", "manager", "staff", "viewer"]), // admin requires super_admin caller
 });
 
 export const adminSetRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: unknown) => setRoleSchema.parse(d))
   .handler(async ({ data, context }) => {
+    // Only super_admin callers can promote someone to admin
+    if (data.role === "admin") {
+      const { data: isSA } = await callServerRpc(context.supabase, "is_super_admin", { _user_id: context.userId });
+      if (!isSA) throw new Error("Only Super Admins can assign the Admin role.");
+    }
     const { error } = await callServerRpc(context.supabase, "admin_set_role", {
       _user: data.user_id,
       _role: data.role,
