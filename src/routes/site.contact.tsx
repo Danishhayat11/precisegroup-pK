@@ -130,10 +130,20 @@ function ContactPage() {
             />
 
             {status === "sent" ? (
-              <div className="relative py-12 text-center">
-                <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-foreground/12 text-foreground">
+              <motion.div 
+                initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9, y: 10 }}
+                animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                transition={{ type: "spring", bounce: 0.4, duration: 0.6 }}
+                className="relative py-12 text-center"
+              >
+                <motion.div 
+                  initial={reduce ? { opacity: 0 } : { scale: 0 }}
+                  animate={reduce ? { opacity: 1 } : { scale: 1 }}
+                  transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
+                  className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--gold)]/10 text-[var(--gold)]"
+                >
                   <CheckCircle2 className="h-7 w-7" />
-                </div>
+                </motion.div>
                 <h2 className="mt-6">Message received.</h2>
                 <p className="lead mx-auto mt-3 max-w-md">
                   Thank you {values.name.split(" ")[0] || "for reaching out"} — a partner will
@@ -156,7 +166,7 @@ function ContactPage() {
                   Send another
                   <ArrowUpRight className="h-4 w-4" />
                 </button>
-              </div>
+              </motion.div>
             ) : (
               <form onSubmit={onSubmit} noValidate className="relative grid gap-5">
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -330,11 +340,10 @@ function Field({
 function fieldClass(invalid: boolean) {
   return [
     "w-full rounded-xl border bg-card px-4 py-3 text-[14px] text-foreground placeholder:text-muted-foreground/70",
-    "outline-none transition-colors",
+    "outline-none transition-all duration-300",
     invalid
-      ? "border-destructive/50 focus:border-destructive"
-      : "border-foreground/12 focus:border-foreground/40",
-    "focus:ring-4 focus:ring-foreground/12",
+      ? "border-destructive focus:border-destructive focus:ring-4 focus:ring-destructive/20"
+      : "border-foreground/12 focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--gold)]/20",
   ].join(" ");
 }
 

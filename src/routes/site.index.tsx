@@ -490,18 +490,25 @@ function HomePage() {
           </span>
         </div>
 
-        <motion.div {...fade} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SERVICES.map((s, i) => (
-            <article key={s.title} className="lg-tile group flex flex-col">
+            <motion.article 
+              key={s.title} 
+              initial={reduce ? {} : { opacity: 0, y: 16 }}
+              whileInView={reduce ? {} : { opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.55, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+              className="lg-tile group flex flex-col"
+            >
               <p className="mb-10 text-xs font-semibold tracking-[0.24em] text-[var(--gold)]">
                 {String(i + 1).padStart(2, "0")} &mdash;
               </p>
               <h3 className="site-h3 mb-4 text-foreground">{s.title}</h3>
               <p className="text-sm font-light leading-relaxed text-muted-foreground">{s.body}</p>
               <div className="mt-8 h-px w-8 bg-[var(--gold)] transition-all duration-500 group-hover:w-full" />
-            </article>
+            </motion.article>
           ))}
-        </motion.div>
+        </div>
       </Section>
 
       {/* ================= CINEMATIC 3D VIDEO & DRONE TOURS ================= */}
