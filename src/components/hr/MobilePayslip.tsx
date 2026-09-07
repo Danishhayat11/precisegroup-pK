@@ -136,7 +136,7 @@ export function MobilePayslipSheet({
               // A5 portrait proportions — width fills the sheet, height
               // follows 210/148 ratio so screenshots look print-ready.
               className={cn(
-                "mx-auto bg-white text-gray-900 shadow-md rounded-lg overflow-hidden",
+                "mx-auto bg-white text-slate-900 shadow-md rounded-lg overflow-hidden",
                 "aspect-[148/210] max-w-[420px] w-full",
               )}
               style={{ fontFamily: "system-ui, sans-serif" }}
@@ -245,12 +245,12 @@ function PayslipContent({
         />
       </div>
 
-      <div className="mt-3 rounded-md bg-gray-900 text-white px-3 py-3 flex items-center justify-between">
+      <div className="mt-3 rounded-md bg-slate-900 text-white px-3 py-3 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide">Net Payable</span>
         <span className="text-lg font-bold tabular-nums">{fmtPKR(payslip.net_salary)}</span>
       </div>
 
-      <div className="mt-3 text-center text-[9px] text-gray-500">
+      <div className="mt-3 text-center text-[9px] text-slate-500">
         {payslip.paid_at ? `Paid on ${fmtDate(payslip.paid_at)}` : "Payment pending"}
       </div>
     </div>
@@ -260,7 +260,7 @@ function PayslipContent({
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <div className="text-[9px] uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
       <div className={cn("text-[11px] font-medium truncate", mono && "font-mono")}>{value}</div>
     </div>
   );

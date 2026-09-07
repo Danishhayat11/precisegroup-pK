@@ -317,7 +317,7 @@ function MobileCollectSheet({
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <div
                 ref={receiptRef}
-                className="bg-white text-slate-900 rounded-2xl border p-5 space-y-3 max-w-sm mx-auto"
+                className="bg-card text-card-foreground rounded-2xl border p-5 space-y-3 max-w-sm mx-auto"
               >
                 <div className="grid place-items-center">
                   <div className="h-14 w-14 rounded-full bg-emerald-100 grid place-items-center">

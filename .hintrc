@@ -1,0 +1,15 @@
+{
+  "extends": [
+    "development"
+  ],
+  "hints": {
+    "compat-api/css": [
+      "off",
+      {
+        "ignore": [
+          "background-color: color-mix(in oklab, var(--primary) 24%, transparent)"
+        ]
+      }
+    ]
+  }
+}

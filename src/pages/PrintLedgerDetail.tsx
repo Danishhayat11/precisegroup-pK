@@ -232,7 +232,7 @@ export default function PrintLedgerDetail() {
       {/* .print-area = everything below is what lands on paper. */}
       <div
         ref={docRef}
-        className="print-area doc-sheet mx-auto w-full max-w-[210mm] rounded-none border border-black bg-white p-[12.7mm] font-serif text-black shadow-sm print:border-0 print:shadow-none print:p-0"
+        className="print-area doc-sheet mx-auto w-full max-w-[210mm] rounded-none border border-border bg-card p-[12.7mm] font-serif text-card-foreground shadow-sm print:border-0 print:shadow-none print:p-0"
       >
         <PrintFrame
           docTitle="Installment Ledger Statement"

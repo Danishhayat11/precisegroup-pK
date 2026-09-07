@@ -23,7 +23,7 @@ async function assertAdmin(supabase: any, userId: string) {
 const inviteSchema = z.object({
   email: z.string().email(),
   full_name: z.string().trim().min(1).max(120).optional(),
-  role: z.enum(["admin", "manager", "staff", "viewer"]).default("staff"),
+  role: z.enum(["manager", "staff", "viewer"]).default("staff"),
 });
 
 export const adminInviteUser = createServerFn({ method: "POST" })
@@ -77,7 +77,7 @@ export const adminInviteUser = createServerFn({ method: "POST" })
 
 const setRoleSchema = z.object({
   user_id: z.string().uuid(),
-  role: z.enum(["admin", "manager", "staff", "viewer"]),
+  role: z.enum(["manager", "staff", "viewer"]), // Block escalating to admin through this normal flow
 });
 
 export const adminSetRole = createServerFn({ method: "POST" })

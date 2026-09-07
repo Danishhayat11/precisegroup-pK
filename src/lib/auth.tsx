@@ -28,6 +28,7 @@ interface AuthCtx {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   canWrite: boolean;
+  hasMinimumRole: (minRole: AppRole) => boolean;
 }
 
 const Ctx = createContext<AuthCtx>({
@@ -49,6 +50,7 @@ const Ctx = createContext<AuthCtx>({
   isAdmin: false,
   isSuperAdmin: false,
   canWrite: false,
+  hasMinimumRole: () => false,
 });
 
 const SEED_COMPANY_ID = "00000000-0000-0000-0000-000000000001";
@@ -154,6 +156,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isOwner = roles.includes("owner");
+  
+  const roleWeights: Record<AppRole, number> = {
+    super_admin: 50,
+    owner: 40,
+    admin: 40,
+    manager: 30,
+    staff: 20,
+    viewer: 10,
+  };
+
+  const hasMinimumRole = (minRole: AppRole) => {
+    const minWeight = roleWeights[minRole] ?? 0;
+    const maxUserWeight = roles.reduce((max, role) => Math.max(max, roleWeights[role] ?? 0), 0);
+    return maxUserWeight >= minWeight;
+  };
+
   // Dev-only preview override — resolves to null in production bundles.
   // When set (via ?forcePlan=starter|professional|builder), every
   // consumer of `useAuth().plan` sees the forced tier without touching
@@ -181,10 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) await loadRolesAndCompany(user.id);
     },
     isOwner,
-    // Owner is a superset of admin — they get every admin-gated capability.
-    isAdmin: isOwner || roles.includes("admin") || roles.includes("super_admin"),
-    isSuperAdmin: roles.includes("super_admin"),
-    canWrite: roles.some((r) => ["owner", "admin", "manager", "staff", "super_admin"].includes(r)),
+    isAdmin: hasMinimumRole("admin"),
+    isSuperAdmin: hasMinimumRole("super_admin"),
+    canWrite: hasMinimumRole("staff"),
+    hasMinimumRole,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

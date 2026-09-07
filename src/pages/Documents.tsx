@@ -669,7 +669,7 @@ export function LetterheadLivePreview() {
         )}
       </div>
       <div
-        className="mx-auto bg-white text-black rounded border p-6"
+        className="mx-auto bg-card text-card-foreground rounded border p-6"
         style={{ maxWidth: "820px", fontFamily: "'Times New Roman', serif" }}
       >
         <Letterhead c={previewCtx} />

@@ -830,7 +830,7 @@ export default function DocumentView() {
           {/* Live letterhead preview — scaled-down render of the actual header
               using the currently selected logo, so the user can verify the
               brand mark before saving / exporting. */}
-          <div className="mt-2 w-[420px] max-w-full rounded-md border border-border bg-white overflow-hidden shadow-sm">
+          <div className="mt-2 w-[420px] max-w-full rounded-md border border-border bg-card overflow-hidden shadow-sm">
             <div className="flex items-center justify-between px-2 py-1 bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground">
               <span>Letterhead preview</span>
               <span>
@@ -989,7 +989,7 @@ export default function DocumentView() {
               <style>{PRINT_CSS}</style>
               <div
                 ref={sheetRef}
-                className="mx-auto bg-white text-black shadow-[var(--shadow-elegant)] print:shadow-none doc-sheet"
+                className="mx-auto bg-card text-card-foreground shadow-[var(--shadow-elegant)] print:shadow-none doc-sheet"
                 style={{
                   width: `${pageDims.w}mm`,
                   minHeight: `${pageDims.h}mm`,

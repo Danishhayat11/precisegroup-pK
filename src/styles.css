@@ -8,7 +8,9 @@
   }
   body {
     background-color: var(--background);
+    color: var(--foreground);
     position: relative;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   body::before {
     content: "";
@@ -279,8 +281,8 @@
    * ────────────────────────────────────────────────────────────────── */
 
   /* Canvas & surfaces */
-  --background: hsl(240 5% 96%); /* Apple system gray (F5F5F7) for perfect white card contrast */
-  --foreground: hsl(222 47% 5%); /* Deeper ink for sharper text contrast */
+  --background: hsl(0 0% 99%); /* Crisp almost-white for a very clean, premium look */
+  --foreground: hsl(222 47% 7%); /* Deeper ink for sharper text contrast */
 
   --card: hsl(0 0% 100%);
   --card-foreground: hsl(222 47% 5%);
@@ -289,7 +291,7 @@
   --popover-foreground: hsl(222 47% 5%);
 
   /* Primary = Crisp Navy Blue */
-  --primary: hsl(217 65% 38%); /* Slightly more saturated navy for better visibility */
+  --primary: hsl(222 47% 15%); /* Deep premium navy, extremely elegant */
   --primary-foreground: hsl(0 0% 100%);
 
   --secondary: hsl(214 32% 95%);
@@ -474,16 +476,16 @@
 }
 
 .dark {
-  /* True matte obsidian variant — deep, refined, OLED black */
-  --background: hsl(222 25% 4%); /* Pure obsidian backdrop */
+  /* Premium Dark Mode — deep slate-blue with high contrast */
+  --background: hsl(222 47% 4%); /* Deep slate-blue backdrop */
   --foreground: hsl(0 0% 100%); /* Crisp white text */
   --card: hsl(222 20% 8%);
   --card-foreground: hsl(0 0% 100%);
   --popover: hsl(222 20% 9%);
   --popover-foreground: hsl(0 0% 100%);
 
-  --primary: hsl(42 85% 65%); /* Vibrant gold for dark mode CTAs */
-  --primary-foreground: hsl(222 25% 4%);
+  --primary: hsl(210 100% 45%); /* Deepened blue for dark mode CTAs to pass 4.5:1 WCAG contrast with white text */
+  --primary-foreground: hsl(0 0% 100%);
   --secondary: hsl(222 15% 12%);
   --secondary-foreground: hsl(210 20% 98%);
 
@@ -497,9 +499,9 @@
   --destructive-text: hsl(0 80% 68%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(215 18% 44%); /* Clear 3.2:1 separation for dark mode grids (SC 1.4.11) */
-  --input: hsl(215 18% 44%);
-  --ring: hsl(42 85% 65%);
+  --border: hsl(222 18% 45%); /* Lightened subtle borders to pass 3:1 WCAG contrast against canvas */
+  --input: hsl(222 18% 45%);
+  --ring: hsl(210 100% 60%);
 
   --success: hsl(155 75% 50%);
   --success-foreground: hsl(222 25% 4%);
@@ -508,8 +510,8 @@
   --info: hsl(205 90% 65%);
   --info-foreground: hsl(222 25% 4%);
 
-  --gold: hsl(42 85% 65%);
-  --gold-foreground: hsl(222 25% 4%);
+  --gold: hsl(210 100% 45%);
+  --gold-foreground: hsl(0 0% 100%);
 
   --adjustment: hsl(275 65% 70%);
   --adjustment-foreground: hsl(222 25% 4%);
