@@ -631,7 +631,7 @@ export default function DocumentView() {
                 onClick={() => heightsSample && setSelected(heightsSample.booking_id)}
                 disabled={!heightsSample}
                 aria-pressed={activeIsHeights}
-                className={`${btn} ${activeIsHeights ? "bg-emerald-700 text-white border-emerald-700" : "bg-background hover:bg-emerald-50 border-transparent"}`}
+                className={`${btn} ${activeIsHeights ? "bg-emerald-700 text-white border-emerald-700" : "bg-background hover:bg-muted border-transparent"}`}
               >
                 Manal Heights
               </button>
@@ -640,7 +640,7 @@ export default function DocumentView() {
                 onClick={() => arcadeSample && setSelected(arcadeSample.booking_id)}
                 disabled={!arcadeSample}
                 aria-pressed={!!booking && !activeIsHeights}
-                className={`${btn} ${!!booking && !activeIsHeights ? "bg-slate-800 text-white border-slate-800" : "bg-background hover:bg-slate-50 border-transparent"}`}
+                className={`${btn} ${!!booking && !activeIsHeights ? "bg-slate-800 text-white border-slate-800 dark:bg-slate-700" : "bg-background hover:bg-muted border-transparent"}`}
               >
                 Manal Arcade
               </button>

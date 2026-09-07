@@ -326,7 +326,7 @@ function MobileCollectSheet({
                 </div>
                 <div className="text-center">
                   <h3 className="text-lg font-bold">Maintenance Receipt</h3>
-                  <p className="text-xs text-slate-500">Precise Realtors &amp; Builders</p>
+                  <p className="text-xs text-muted-foreground">Precise Realtors &amp; Builders</p>
                 </div>
                 <div className="border-t pt-3 space-y-1.5 text-sm">
                   <RRow label="Receipt No" value={receipt.receipt_no} mono />
@@ -340,12 +340,12 @@ function MobileCollectSheet({
                   )}
                 </div>
                 <div className="border-t pt-3 flex items-center justify-between">
-                  <span className="text-sm text-slate-500">Amount Paid</span>
+                  <span className="text-sm text-muted-foreground">Amount Paid</span>
                   <span className="text-xl font-bold tabular-nums">
                     PKR {fmtPKR(receipt.amount_paid)}
                   </span>
                 </div>
-                <p className="text-[10px] text-center text-slate-400 pt-2">
+                <p className="text-[10px] text-center text-muted-foreground pt-2">
                   Thank you for your payment.
                 </p>
               </div>
@@ -486,7 +486,7 @@ function MobileCollectSheet({
 function RRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-xs uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
       <span className={cn("text-sm text-right truncate", mono && "font-mono")}>{value}</span>
     </div>
   );

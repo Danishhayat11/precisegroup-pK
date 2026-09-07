@@ -100,14 +100,14 @@ export function AIInsightsCard({ snapshot }: { snapshot: AISnapshot }) {
   }, [snapshot]);
 
   return (
-    <div className="glass-card rounded-3xl p-6 text-white transition-all duration-200 shadow-lg">
+    <div className="glass-card rounded-3xl p-6 text-foreground transition-all duration-200 shadow-lg">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gold/20 ring-1 ring-gold/40">
             <Sparkles className="h-4 w-4 text-gold" />
           </span>
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-medium">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground font-medium">
               AI Briefing
             </div>
             <h2 className="font-display text-base font-semibold m-0">Today's read on the book</h2>
@@ -116,7 +116,7 @@ export function AIInsightsCard({ snapshot }: { snapshot: AISnapshot }) {
         <button
           onClick={run}
           disabled={loading}
-          className="text-white/70 hover:text-white p-1.5 rounded-md hover:bg-white/10 transition-colors"
+          className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-muted/50 transition-colors"
           title="Regenerate"
           aria-label="Regenerate insights"
         >
@@ -127,7 +127,7 @@ export function AIInsightsCard({ snapshot }: { snapshot: AISnapshot }) {
           )}
         </button>
       </div>
-      <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 text-white/85">
+      <div className="prose dark:prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 text-foreground/85">
         {err ? (
           <div className="flex items-start gap-2 text-rust">
             <AlertTriangle className="h-4 w-4 mt-0.5" />
@@ -137,10 +137,10 @@ export function AIInsightsCard({ snapshot }: { snapshot: AISnapshot }) {
           <ReactMarkdown>{text}</ReactMarkdown>
         ) : (
           <div className="space-y-2 animate-pulse">
-            <div className="h-3 w-11/12 bg-white/10 rounded" />
-            <div className="h-3 w-9/12 bg-white/10 rounded" />
-            <div className="h-3 w-10/12 bg-white/10 rounded" />
-            <div className="h-3 w-8/12 bg-white/10 rounded" />
+            <div className="h-3 w-11/12 bg-muted rounded" />
+            <div className="h-3 w-9/12 bg-muted rounded" />
+            <div className="h-3 w-10/12 bg-muted rounded" />
+            <div className="h-3 w-8/12 bg-muted rounded" />
           </div>
         )}
       </div>
@@ -359,21 +359,19 @@ export function AIChatLauncher({ snapshot }: { snapshot: AISnapshot }) {
               transition={{ type: "spring", stiffness: 240, damping: 28 }}
               className="fixed top-0 right-0 bottom-0 z-50 w-full sm:w-[440px] bg-background border-l border-border shadow-2xl flex flex-col"
             >
-              <div className="px-5 py-4 border-b flex items-center justify-between magazine-hero text-white">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-gold" />
+              <div className="px-5 py-4 border-b flex items-center justify-between magazine-hero text-foreground">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded bg-gold/20 ring-1 ring-gold/40">
+                    <Sparkles className="h-4 w-4 text-gold" />
+                  </span>
                   <div>
-                    <div className="font-display text-base font-semibold leading-tight">
-                      Precise AI Analyst
-                    </div>
-                    <div className="text-[11px] text-white/60">
-                      Scoped to current filters · {snapshot.rangeLabel}
-                    </div>
+                    <h2 className="font-display text-sm font-semibold m-0 leading-tight">Insight Generator</h2>
+                    <div className="text-[11px] text-muted-foreground">Contextual intelligence</div>
                   </div>
                 </div>
                 <button
                   onClick={() => setOpen(false)}
-                  className="text-white/70 hover:text-white p-1.5 rounded-md hover:bg-white/10"
+                  className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-muted/50"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
